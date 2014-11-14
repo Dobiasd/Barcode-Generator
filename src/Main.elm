@@ -27,7 +27,7 @@ scene baseContentSig addonContentSig =
                 spacer 100 1,
                 showBarcode 640 240 <| generateBarcode base addon
             ],
-            flow right [ plainText base, spacer 10 1, plainText addon ]
+            flow right [ plainText <| baseInputToBarcodeString base, spacer 10 1, plainText addon ]
         ]
 
 baseContent : Input Field.Content
@@ -72,30 +72,48 @@ invertBinaryChar c = case c of
     '1' -> '0'
     otherwise -> '-'
 
+baseInputToBarcodeString : String -> String
+baseInputToBarcodeString base =
+    let base' = String.padLeft 12 '0' base
+        base'' = appendCheckDigit base'
+    in  if baseOK base then appendCheckDigit base'' else ""
+
+{- Input must have length 12. -}
+appendCheckDigit : String -> String
+appendCheckDigit str = str ++ calcCheckDigit str
+
+baseOK : String -> Bool
+baseOK = Regex.contains (Regex.regex "^\\d{11,12}$")
+
+addonOK addon = addon == "" ||
+    Regex.contains (Regex.regex "^\\d{2}$") addon ||
+    Regex.contains (Regex.regex "^\\d{5}$") addon
+
 generateBarcode : String -> String -> Binary
 generateBarcode base addon =
-    let baseOK = Regex.contains (Regex.regex "^\\d{11,12}$") base
-        addonOK = addon == "" ||
-            Regex.contains (Regex.regex "^\\d{2}$") addon ||
-            Regex.contains (Regex.regex "^\\d{5}$") addon
-    in  if baseOK && addonOK then generateEAN13 base else ""
+    let base' = baseInputToBarcodeString base
+    in  if baseOK base && addonOK addon then generateEAN13 base' else ""
 
+{- Input must have length 13. -}
 generateEAN13 : String -> Binary
 generateEAN13 str =
     let startGuard = "101"
         middleGuard = "01010"
         endGuard = "101"
-        front = generateEAN13Front <| String.left 7 str
-        back = generateEAN13Back <| String.right 6 str
+        front = String.left 7 str |> generateEAN13Front
+        back = String.right 6 str |> generateEAN13Back
     in  startGuard ++ front ++ middleGuard ++ back ++ endGuard
 
-calcCheckDigit : String -> Char
+{- Input must have length 12. -}
+calcCheckDigit : String -> String
 calcCheckDigit str =
-    let vals = String.toList str
+    let vals = str |> String.reverse |> String.toList
             |> filterMap ((\x -> [x]) >> String.fromList >> String.toInt)
-        f (a, b) = a + 3 * b
+        f (a, b) = 3 * a + b
         s = vals |> nonOverlappingPairs |> map f |> sum
-    in  s `rem` 10 |> show |> String.toList |> head
+    in  if length vals == 12
+        then 10 - s `rem` 10 |> show
+        else ""
 
 {-| nonOverlappingPairs [1,2,3,4,5] === [(1,2),(3,4)] -}
 nonOverlappingPairs : [a] -> [(a,a)]
