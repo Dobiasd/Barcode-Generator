@@ -26,7 +26,7 @@ upcBinToDigitsR : Dict.Dict Char String
 upcBinToDigitsR = Dict.map invertBinaryStr upcBinToDigitsL
 
 upcBinToDigitsG : Dict.Dict Char String
-upcBinToDigitsG = Dict.map String.reverse upcBinToDigitsL
+upcBinToDigitsG = Dict.map String.reverse upcBinToDigitsR
 
 upcCodeToBinToDigits : Dict.Dict Char (Dict.Dict Char String)
 upcCodeToBinToDigits = [
