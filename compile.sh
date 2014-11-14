@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-elm -m src/Main.elm
-mv build/src/* build
+elm -m --bundle-runtime src/Main.elm
+mv build/src/Main.html build/index.html
 rmdir build/src
