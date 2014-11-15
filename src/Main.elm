@@ -20,14 +20,14 @@ scene baseContentSig addonContentSig =
             asText upcBinToDigitsL,
             asText upcBinToDigitsR,
             asText upcBinToDigitsG,
-            showEdit baseContent.handle "123456789012" baseContentSig,
-            showEdit addonContent.handle "12345" addonContentSig,
-            plainText <| generateBarcode base addon, -- debug output
+            showEdit baseContent.handle "base code: 11 or 12 digits" baseContentSig,
+            showEdit addonContent.handle "addon: 0, 2 or 5 digits" addonContentSig,
             flow right [
                 spacer 100 1,
-                showBarcode 640 240 <| generateBarcode base addon
+                displayBinary 640 240 <| generateBarcode base addon
             ],
-            flow right [ plainText <| baseInputToBarcodeString base, spacer 10 1, plainText addon ]
+            flow right [ plainText <| baseInputToBarcodeString base, spacer 10 1, plainText addon ],
+            plainText <| generateBarcode base addon -- debug output
         ]
 
 baseContent : Input Field.Content
@@ -37,6 +37,7 @@ addonContent : Input Field.Content
 addonContent = input Field.noContent
 
 type Binary = String
+
 
 upcBinToDigitsL : Dict.Dict Char Binary
 upcBinToDigitsL = [
@@ -51,14 +52,27 @@ upcBinToDigitsL = [
     ('8', "0110111"),
     ('9', "0001011") ] |> Dict.fromList
 
+firstDigitToParities : Dict.Dict Char [Char]
+firstDigitToParities = [
+    ('0', "LLLLLL"),
+    ('1', "LLGLGG"),
+    ('2', "LLGGLG"),
+    ('3', "LLGGGL"),
+    ('4', "LGLLGG"),
+    ('5', "LGGLLG"),
+    ('6', "LGGGLL"),
+    ('7', "LGLGLG"),
+    ('8', "LGLGGL"),
+    ('9', "LGGLGL") ] |> Dict.fromList |> Dict.map String.toList
+
 upcBinToDigitsR : Dict.Dict Char Binary
 upcBinToDigitsR = Dict.map invertBinaryStr upcBinToDigitsL
 
 upcBinToDigitsG : Dict.Dict Char Binary
 upcBinToDigitsG = Dict.map String.reverse upcBinToDigitsR
 
-upcCodeToBinToDigits : Dict.Dict Char (Dict.Dict Char Binary)
-upcCodeToBinToDigits = [
+parityToBinToDigits : Dict.Dict Char (Dict.Dict Char Binary)
+parityToBinToDigits = [
     ('L', upcBinToDigitsL),
     ('R', upcBinToDigitsR),
     ('G', upcBinToDigitsG) ] |> Dict.fromList
@@ -123,16 +137,30 @@ nonOverlappingPairs l = case l of
 
 -- todo
 generateEAN13Front : String -> Binary
-generateEAN13Front str = "0000000000"
+generateEAN13Front str =
+    let (first, rest) = case String.uncons str of
+                            Just p -> p
+                            Nothing -> ('0', "")
+        parities : [Char]
+        parities = Dict.getOrFail first firstDigitToParities
+        charDicts : [Dict.Dict Char Binary]
+        charDicts = map (flip Dict.getOrFail parityToBinToDigits) parities
+        chars : [Char]
+        chars = String.toList rest
+        binaries : [Binary]
+        binaries = zipWith Dict.getOrFail chars charDicts
+    in  String.concat binaries
 
 -- todo
 generateEAN13Back : String -> Binary
-generateEAN13Back str = "0000000000"
+generateEAN13Back str =
+    let chars = String.toList str
+        binaries = zipWith Dict.getOrFail chars <| repeat 6 upcBinToDigitsR
+    in  String.concat binaries
 
-showBarcode : Int -> Int -> String -> Element
-showBarcode w h str =
-    let bin = generateEAN13 str
-        frms = showBinary bin
+displayBinary : Int -> Int -> Binary -> Element
+displayBinary w h bin =
+    let frms = showBinary bin
         fx = toFloat w / toFloat (length frms)
         tsx = Transform2D.scaleX fx
         tsy = Transform2D.scaleY <| toFloat h
