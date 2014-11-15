@@ -129,14 +129,35 @@ generateAddon2 str =
     in  startGuard ++ front ++ middleGuard ++ back
 
 addon2Parities : Int -> [Char]
-addon2Parities value = case value `rem` 4 of
+addon2Parities checksum = case checksum `rem` 4 of
     0 -> ['L', 'L']
     1 -> ['L', 'G']
     2 -> ['G', 'L']
     3 -> ['G', 'G']
 
+addon5Parities : Int -> [Char]
+addon5Parities checksum = case checksum `rem` 10 of
+    0 -> ['G', 'G', 'L', 'L', 'L']
+    1 -> ['G', 'L', 'G', 'L', 'L']
+    2 -> ['G', 'L', 'L', 'G', 'L']
+    3 -> ['G', 'L', 'L', 'L', 'G']
+    4 -> ['L', 'G', 'G', 'L', 'L']
+    5 -> ['L', 'L', 'G', 'G', 'L']
+    6 -> ['L', 'L', 'L', 'G', 'G']
+    7 -> ['L', 'G', 'L', 'G', 'L']
+    8 -> ['L', 'G', 'L', 'L', 'G']
+    9 -> ['L', 'L', 'G', 'L', 'G']
+
 generateAddon5 : String -> Binary
-generateAddon5 str = ""
+generateAddon5 str =
+    let startGuard = "01011"
+        separator = "01"
+        digitValues = stringToDigitValues str
+        parities = addon5Parities <| calcCheckSum (3, 9) digitValues
+        charDicts = map (flip Dict.getOrFail parityToDigitsToBin) parities
+        chars = String.toList str
+        binaries = zipWith Dict.getOrFail chars charDicts
+    in startGuard ++ (intersperse separator binaries |> String.concat)
 
 {- Input must have length 13. -}
 generateEAN13 : String -> Binary
@@ -151,13 +172,22 @@ generateEAN13 str =
 {- Input must have length 12. -}
 calcCheckDigit : String -> String
 calcCheckDigit str =
-    let vals = str |> String.reverse |> String.toList
-            |> filterMap ((\x -> [x]) >> String.fromList >> String.toInt)
-        f (a, b) = 3 * a + b
-        s = vals |> nonOverlappingPairs |> map f |> sum
+    let vals = str |> String.reverse |> stringToDigitValues
+        s = calcCheckSum (3, 1) vals
     in  if length vals == 12
         then 10 - s `rem` 10 |> show
         else ""
+
+stringToDigitValues = String.toList >>
+    filterMap ((\x -> [x]) >>
+        String.fromList >>
+        String.toInt)
+
+calcCheckSum : (Int, Int) -> [Int] -> Int
+calcCheckSum (m1, m2) xs =
+    let xs' = if length xs `rem` 2 == 0 then xs else xs ++ [0]
+        f (a, b) = m1 * a + m2 * b
+    in  xs' |> nonOverlappingPairs |> map f |> sum
 
 {-| nonOverlappingPairs [1,2,3,4,5] === [(1,2),(3,4)] -}
 nonOverlappingPairs : [a] -> [(a,a)]
