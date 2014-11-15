@@ -1,3 +1,5 @@
+-- todo docstrings, links, layout, type safety
+
 module BarcodeGenerator where
 
 import Dict
@@ -17,8 +19,12 @@ scene baseContentSig addonContentSig =
         showEdit h = Field.field Field.defaultStyle h identity
     in  flow down [
             plainText "Barcode Generator",
-            showEdit baseContent.handle "base code: 11 or 12 digits" baseContentSig,
-            showEdit addonContent.handle "addon: 0, 2 or 5 digits" addonContentSig,
+            showEdit baseContent.handle
+                "base code: 11 or 12 digits"
+                baseContentSig,
+            showEdit addonContent.handle
+                "addon: 0, 2 or 5 digits"
+                addonContentSig,
             flow right [
                 spacer 100 1,
                 displayBarcode 640 240 base addon
@@ -87,7 +93,7 @@ baseInputToBarcodeString base =
         base'' = appendCheckDigit base'
     in  if baseOK base then appendCheckDigit base'' else ""
 
-{- Input must have length 12. -}
+{-| Input must have length 12. -}
 appendCheckDigit : String -> String
 appendCheckDigit str = str ++ calcCheckDigit str
 
@@ -159,7 +165,7 @@ generateAddon5 str =
         binaries = zipWith Dict.getOrFail chars charDicts
     in startGuard ++ (intersperse separator binaries |> String.concat)
 
-{- Input must have length 13. -}
+{-| Input must have length 13. -}
 generateEAN13 : String -> Binary
 generateEAN13 str =
     let startGuard = "101"
@@ -169,7 +175,7 @@ generateEAN13 str =
         back = String.right 6 str |> generateEAN13Back
     in  startGuard ++ front ++ middleGuard ++ back ++ endGuard
 
-{- Input must have length 12. -}
+{-| Input must have length 12. -}
 calcCheckDigit : String -> String
 calcCheckDigit str =
     let vals = str |> String.reverse |> stringToDigitValues
