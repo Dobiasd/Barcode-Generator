@@ -2,9 +2,11 @@
 
 module BarcodeGenerator where
 
+import Debug
 import Dict
 import Regex
 import String
+import Text
 import Transform2D
 import Graphics.Input (Input, input)
 import Graphics.Input.Field as Field
@@ -27,7 +29,7 @@ scene baseContentSig addonContentSig =
                 addonContentSig,
             flow right [
                 spacer 100 1,
-                displayBarcode 4 100 base addon
+                displayBarcode 4 base addon
             ]
         ]
 
@@ -219,26 +221,42 @@ generateEAN13Back str =
     in  String.concat binaries
 
 -- todo guard patterns longer
-displayBarcode : Int -> Int -> String -> String -> Element
-displayBarcode xSizeFactor destH base addon =
+-- todo all on one canvas for saving
+displayBarcode : Int -> String -> String -> Element
+displayBarcode xSizeFactor base addon =
     let (baseBin, addonBin) = generateBarcode base addon
-        baseElem = displayBinary xSizeFactor destH baseBin
-        humanReadable = flow right [
-                            plainText <| baseInputToBarcodeString base,
-                            spacer 10 1, plainText addon
-                        ] -- todo size, pos
-        addonElem = displayBinary xSizeFactor destH addonBin -- todo size, pos
-        barcodeElem = flow right [ baseElem, spacer 100 1, addonElem]
-        allElem = flow down [ barcodeElem, humanReadable ]
-        (w, h) = sizeOf allElem
-        frm = toForm allElem |> moveX 2
-    in  collage w h [frm]
+        textHeight = 10 * xSizeFactor
+        baseHeightFactor = 0.2
+        destH = 20 * xSizeFactor
+        baseFrm = displayBinary xSizeFactor destH baseBin
+        addonStr = if String.isEmpty addonBin then "" else addon
+        makeText = toText >> monospace >> Text.height textHeight >> leftAligned >> toForm
+        humanReadableBase = baseInputToBarcodeString base |> makeText
+        humanReadableAddon = addonStr |> makeText
+        humanReadable = group [
+                            humanReadableBase |> moveX (baseWidth / 2),
+                            humanReadableAddon |> moveX (addonStart + addonWidth / 2)
+                        ]
+        addonStart = baseWidth + xDist
+        addonFrm = displayBinary xSizeFactor destH addonBin -- todo size, pos
+        addonXDistFact = 30
+        baseWidth = xSizeFactor * 95
+        addonWidth = xSizeFactor * String.length addonBin |> toFloat
+        xDist = xSizeFactor * addonXDistFact
+        barcodeFrm = group [
+                         baseFrm,
+                         moveX (toFloat addonStart) addonFrm
+                     ]
+        allFrm = group [ barcodeFrm, moveY (-textHeight) humanReadable ]
+        w = xSizeFactor * (baseWidth + xDist + addonWidth)
+        h : Int
+        h = toFloat destH + textHeight |> round
+    in  collage (ceiling w) h [ allFrm |> move (-w / 2, -destH / 2) ]
 
-displayBinary : Int -> Int -> Binary -> Element
+displayBinary : Int -> Int -> Binary -> Form
 displayBinary xSizeFactor h bin =
-    let frm = showBinary xSizeFactor h bin |> group
-        w = String.length bin * xSizeFactor
-    in  collage w h [ frm |> moveX (toFloat -w / 2) ]
+    let w = String.length bin * xSizeFactor
+    in  showBinary xSizeFactor h bin |> group
 
 showBinary : Int -> Int -> Binary -> [Form]
 showBinary xSizeFactor h bin =
@@ -252,4 +270,5 @@ showBinChar w h c =
     let col = case c of
         '1' -> black
         otherwise -> white
-    in  rect (toFloat w) (toFloat h) |> filled col |> moveX (toFloat w / 2)
+    in  rect (toFloat w) (toFloat h) |> filled col |>
+            move (toFloat w / 2, toFloat h / 2)
