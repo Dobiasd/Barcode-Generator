@@ -1,4 +1,4 @@
--- todo docstrings, links, layout, type safety
+-- todo docstrings, links, type safety, size scaling
 
 module BarcodeGenerator where
 
@@ -180,7 +180,7 @@ calcCheckDigit str =
     let vals = str |> String.reverse |> stringToDigitValues
         s = calcCheckSum (3, 1) vals
     in  if length vals == 12
-        then 10 - s `rem` 10 |> show
+        then 10 - s `rem` 10 |> \x -> x `rem` 10 |> show
         else ""
 
 stringToDigitValues = String.toList >>
@@ -304,9 +304,7 @@ displayBarcode xSizeFactor baseStr addonStr =
                            textBaseSingle |> move (textBaseSingleX1, textBaseY1),
                            textBaseLeft |> move (textBaseLeftX1, textBaseY1),
                            textBaseRight |> move (textBaseRightX1, textBaseY1),
-                           textAddon |> move (textAddonX1, textAddonY1),
-                           rect 111 1 |> filled green |> move (0.5, 0.5),
-                           rect 1 111 |> filled green |> move (0.5, 0.5)
+                           textAddon |> move (textAddonX1, textAddonY1)
                          ]
 
     in  if String.isEmpty baseBin || (not <| addonOK addonStr)
