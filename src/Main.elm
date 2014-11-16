@@ -107,8 +107,8 @@ addonOK addon = addon == "" ||
 generateBarcode : String -> String -> (Binary, Binary)
 generateBarcode base addon =
     let base' = baseInputToBarcodeString base
-    in  if baseOK base && addonOK addon
-        then (generateEAN13 base', generateAddon addon) else ("", "")
+    in  (if baseOK base then generateEAN13 base' else "",
+         if addonOK addon then generateAddon addon else "")
 
 generateAddon : String -> Binary
 generateAddon str = case String.length str of
