@@ -2,7 +2,6 @@
 
 module BarcodeGenerator where
 
-import Debug
 import Dict
 import Regex
 import String
@@ -20,6 +19,7 @@ scene baseContentSig addonContentSig =
         addon = addonContentSig.string
         showEdit h = Field.field Field.defaultStyle h identity
     in  flow down [
+            spacer 640 1,
             plainText "Barcode Generator",
             showEdit baseContent.handle
                 "base code: 11 or 12 digits"
@@ -29,7 +29,7 @@ scene baseContentSig addonContentSig =
                 addonContentSig,
             flow right [
                 spacer 100 1,
-                displayBarcode 4 base addon
+                displayBarcode 1 base addon
             ]
         ]
 
@@ -89,15 +89,12 @@ invertBinaryChar c = case c of
     '1' -> '0'
     otherwise -> '-'
 
-baseInputToBarcodeString : String -> String
-baseInputToBarcodeString base =
+baseInputToBarcodeString : Bool -> String -> String
+baseInputToBarcodeString leadingZeroIfNeeded base =
     let base' = String.padLeft 12 '0' base
-        base'' = appendCheckDigit base'
-    in  if baseOK base then appendCheckDigit base'' else ""
-
-{-| Input must have length 12. -}
-appendCheckDigit : String -> String
-appendCheckDigit str = str ++ calcCheckDigit str
+        checkDigit = calcCheckDigit base'
+        baseOut = (if leadingZeroIfNeeded then base' else base) ++ checkDigit
+    in  if baseOK base then baseOut else ""
 
 baseOK : String -> Bool
 baseOK = Regex.contains (Regex.regex "^\\d{11,12}$")
@@ -108,7 +105,7 @@ addonOK addon = addon == "" ||
 
 generateBarcode : String -> String -> (Binary, Binary)
 generateBarcode base addon =
-    let base' = baseInputToBarcodeString base
+    let base' = baseInputToBarcodeString True base
     in  (if baseOK base then generateEAN13 base' else "",
          if addonOK addon then generateAddon addon else "")
 
@@ -220,50 +217,126 @@ generateEAN13Back str =
         binaries = zipWith Dict.getOrFail chars <| repeat 6 upcDigitsToBinR
     in  String.concat binaries
 
--- todo guard patterns longer
 -- todo all on one canvas for saving
 displayBarcode : Int -> String -> String -> Element
-displayBarcode xSizeFactor base addon =
-    let (baseBin, addonBin) = generateBarcode base addon
-        textHeight = 10 * xSizeFactor
-        baseHeightFactor = 0.2
-        destH = 20 * xSizeFactor
-        baseFrm = displayBinary xSizeFactor destH baseBin
-        addonStr = if String.isEmpty addonBin then "" else addon
-        makeText = toText >> monospace >> Text.height textHeight >> leftAligned >> toForm
-        humanReadableBase = baseInputToBarcodeString base |> makeText
-        humanReadableAddon = addonStr |> makeText
-        humanReadable = group [
-                            humanReadableBase |> moveX (baseWidth / 2),
-                            humanReadableAddon |> moveX (addonStart + addonWidth / 2)
-                        ]
-        addonStart = baseWidth + xDist
-        addonFrm = displayBinary xSizeFactor destH addonBin -- todo size, pos
-        addonXDistFact = 30
-        baseWidth = xSizeFactor * 95
-        addonWidth = xSizeFactor * String.length addonBin |> toFloat
-        xDist = xSizeFactor * addonXDistFact
-        barcodeFrm = group [
-                         baseFrm,
-                         moveX (toFloat addonStart) addonFrm
-                     ]
-        allFrm = group [ barcodeFrm, moveY (-textHeight) humanReadable ]
-        w = xSizeFactor * (baseWidth + xDist + addonWidth)
-        h : Int
-        h = toFloat destH + textHeight |> round
-    in  collage (ceiling w) h [ allFrm |> move (-w / 2, -destH / 2) ]
+displayBarcode xSizeFactor baseStr addonStr =
+    let (baseBin, addonBin) = generateBarcode baseStr addonStr
+        base = displayBinary xSizeFactor baseH baseBin
+        addon = displayBinary xSizeFactor addonH addonBin
+        textBaseDistY = 1
+        addonDistX = 12
+        addonTextDistX = 10
+
+        textHeight = 10
+
+        baseX1 = 10
+        baseY1 = textHeight + textBaseDistY
+        baseW = String.length baseBin |> toFloat
+        baseX2 = baseX1 + baseW
+        baseH = 66
+        baseY2 = baseY1 + baseH
+
+        guard1X1 = baseX1
+        guard1Y1 = textHeight / 2
+        guard1Y2 = baseY1
+        guardH = guard1Y2 - guard1Y1
+
+        textBaseY1 = 0
+        textBaseY2 = textHeight
+
+        textBaseSingleX1 = 0
+
+        textBaseLeftX1 = guard2X2 + 3
+        --textBaseLeftX2 = guard3X1 - 3
+
+        textBaseRightX1 = guard4X2 + 3
+        --textBaseRightX2 = guard5X1 - 3
+
+        guard2X1 = guard1X1 + 2
+        guard3X1 = guard1X1 + 46
+        guard4X1 = guard3X1 + 2
+        guard5X1 = guard3X1 + 46
+        guard6X1 = guard5X1 + 2
+
+        guard1X2 = guard1X1 + 1
+        guard2X2 = guard2X1 + 1
+        guard3X2 = guard3X1 + 1
+        guard4X2 = guard4X1 + 1
+        guard5X2 = guard5X1 + 1
+        guard6X2 = guard6X1 + 1
+
+        guard = rect 1 guardH
+            |> filled black
+            |> move (0.5, guardH / 2 |> ceiling |> toFloat)
+            |> moveY guard1Y1
+        guard1 = guard |> moveX guard1X1
+        guard2 = guard |> moveX guard2X1
+        guard3 = guard |> moveX guard3X1
+        guard4 = guard |> moveX guard4X1
+        guard5 = guard |> moveX guard5X1
+        guard6 = guard |> moveX guard6X1
+        guards = group [guard1, guard2, guard3, guard4, guard5, guard6]
+
+        addonX1 = baseX2 + addonDistX
+        addonY1 = baseY1
+        addonW = String.length addonBin |> toFloat
+        addonX2 = addonX1 + addonW
+        addonY2 = baseY2 - (1 + textHeight + 3)
+        addonH = addonY2 - addonY1
+
+        textAddonX1 = addonX1 + addonTextDistX
+        textAddonY1 = addonY2 + 3
+        textAddonX2 = addonX2 - 1
+
+        (strBaseSingle, strBaseLeft, strBaseRight) =
+            baseInputToBarcodeString False baseStr |> splitBaseStr
+        textBaseSingle = showText textHeight strBaseSingle
+        textBaseLeft = showText textHeight strBaseLeft
+        textBaseRight = showText textHeight strBaseRight
+        textAddon = showText textHeight addonStr
+
+        collageW = addonX2 |> ceiling
+        collageH = baseY2 |> ceiling
+
+        mainForm = group [ base |> move (baseX1, baseY1),
+                           guards,
+                           addon |> move (addonX1, addonY1),
+                           textBaseSingle |> move (textBaseSingleX1, textBaseY1),
+                           textBaseLeft |> move (textBaseLeftX1, textBaseY1),
+                           textBaseRight |> move (textBaseRightX1, textBaseY1),
+                           textAddon |> move (textAddonX1, textAddonY1),
+                           rect 111 1 |> filled green |> move (0.5, 0.5),
+                           rect 1 111 |> filled green |> move (0.5, 0.5)
+                         ]
+
+    in  if String.isEmpty baseBin || (not <| addonOK addonStr)
+        then empty
+        else collage (collageW + 4) (collageH + 5) [ mainForm
+                    |> move (toFloat -collageW / 2,
+                             toFloat -collageH / 2) ]
+
+
+splitBaseStr : String -> (String, String, String)
+splitBaseStr str = case String.length str of
+    12 -> ("",                    String.slice 0 6 str, String.slice 6 12 str)
+    13 -> (String.slice 0 1 str , String.slice 1 7 str, String.slice 7 13 str)
+    otherwise -> ("", "", "")
+
+showText : Float -> String -> Form
+showText textHeight str =
+    let elem = str |> toText
+                   |> monospace
+                   |> Text.height textHeight
+                   |> leftAligned
+        (w, h) = sizeOf elem
+    in elem |> toForm |> move (toFloat w / 2 - 1, toFloat h / 4)
 
 displayBinary : Int -> Int -> Binary -> Form
 displayBinary xSizeFactor h bin =
-    let w = String.length bin * xSizeFactor
-    in  showBinary xSizeFactor h bin |> group
-
-showBinary : Int -> Int -> Binary -> [Form]
-showBinary xSizeFactor h bin =
     let frms = map (showBinChar xSizeFactor h) <| String.toList bin
         w = String.length bin
         xs = [0 .. w] |> map (\x -> xSizeFactor * x) |> map toFloat
-    in  zipWith (\f x -> moveX x f) frms xs
+    in  zipWith (\f x -> moveX x f) frms xs |> group
 
 showBinChar : Int -> Int -> Char -> Form
 showBinChar w h c =
