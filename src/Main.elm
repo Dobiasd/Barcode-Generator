@@ -1,4 +1,4 @@
--- todo docstrings, links, type safety, size scaling
+-- todo docstrings, links, type safety
 
 module BarcodeGenerator where
 
@@ -7,14 +7,14 @@ import Regex
 import String
 import Text
 import Transform2D
-import Graphics.Input (Input, input)
+import Graphics.Input (Input, input, dropDown)
 import Graphics.Input.Field as Field
 
 main : Signal Element
-main = scene <~ baseContent.signal ~ addonContent.signal
+main = scene <~ baseContent.signal ~ addonContent.signal ~ sizeContent.signal
 
-scene : Field.Content -> Field.Content -> Element
-scene baseContentSig addonContentSig =
+scene : Field.Content -> Field.Content -> Int -> Element
+scene baseContentSig addonContentSig sizeFactor =
     let base = baseContentSig.string
         addon = addonContentSig.string
         showEdit h = Field.field Field.defaultStyle h identity
@@ -27,9 +27,10 @@ scene baseContentSig addonContentSig =
             showEdit addonContent.handle
                 "addon: 0, 2 or 5 digits"
                 addonContentSig,
+            dropDown sizeContent.handle sizeOptions,
             flow right [
                 spacer 100 1,
-                displayBarcode 1 base addon
+                displayBarcode sizeFactor base addon
             ]
         ]
 
@@ -39,8 +40,19 @@ baseContent = input Field.noContent
 addonContent : Input Field.Content
 addonContent = input Field.noContent
 
-type Binary = String
+sizeContent : Input (Int)
+sizeContent = input 4
 
+sizeOptions : [(String, Int)]
+sizeOptions =
+    [ ("normal", 4),
+      ("smallest", 1),
+      ("small", 2),
+      ("large", 8),
+      ("huge", 16)
+    ]
+
+type Binary = String
 
 upcDigitsToBinL : Dict.Dict Char Binary
 upcDigitsToBinL = [
@@ -223,17 +235,17 @@ displayBarcode xSizeFactor baseStr addonStr =
     let (baseBin, addonBin) = generateBarcode baseStr addonStr
         base = displayBinary xSizeFactor baseH baseBin
         addon = displayBinary xSizeFactor addonH addonBin
-        textBaseDistY = 1
-        addonDistX = 12
-        addonTextDistX = 10
+        textBaseDistY = 3 * xSizeFactor
+        addonDistX = 12 * xSizeFactor
+        addonTextDistX = 10 * xSizeFactor
 
-        textHeight = 10
+        textHeight = 10 * xSizeFactor
 
-        baseX1 = 10
+        baseX1 = 10 * xSizeFactor
         baseY1 = textHeight + textBaseDistY
-        baseW = String.length baseBin |> toFloat
+        baseW = String.length baseBin * xSizeFactor |> toFloat
         baseX2 = baseX1 + baseW
-        baseH = 66
+        baseH = 66 * xSizeFactor
         baseY2 = baseY1 + baseH
 
         guard1X1 = baseX1
@@ -241,33 +253,34 @@ displayBarcode xSizeFactor baseStr addonStr =
         guard1Y2 = baseY1
         guardH = guard1Y2 - guard1Y1
 
-        textBaseY1 = 0
+        textBaseY1 = 0 * xSizeFactor
         textBaseY2 = textHeight
+        textBaseYC = (textBaseY2 - textBaseY1) / 2
 
-        textBaseSingleX1 = 0
+        textBaseSingleX1 = 0 * xSizeFactor
 
-        textBaseLeftX1 = guard2X2 + 3
+        textBaseLeftX1 = guard2X2 + 3 * xSizeFactor
         --textBaseLeftX2 = guard3X1 - 3
 
-        textBaseRightX1 = guard4X2 + 3
+        textBaseRightX1 = guard4X2 + 3 * xSizeFactor
         --textBaseRightX2 = guard5X1 - 3
 
-        guard2X1 = guard1X1 + 2
-        guard3X1 = guard1X1 + 46
-        guard4X1 = guard3X1 + 2
-        guard5X1 = guard3X1 + 46
-        guard6X1 = guard5X1 + 2
+        guard2X1 = guard1X1 + 2 * xSizeFactor
+        guard3X1 = guard1X1 + 46 * xSizeFactor
+        guard4X1 = guard3X1 + 2 * xSizeFactor
+        guard5X1 = guard3X1 + 46 * xSizeFactor
+        guard6X1 = guard5X1 + 2 * xSizeFactor
 
-        guard1X2 = guard1X1 + 1
-        guard2X2 = guard2X1 + 1
-        guard3X2 = guard3X1 + 1
-        guard4X2 = guard4X1 + 1
-        guard5X2 = guard5X1 + 1
-        guard6X2 = guard6X1 + 1
+        guard1X2 = guard1X1 + 1 * xSizeFactor
+        guard2X2 = guard2X1 + 1 * xSizeFactor
+        guard3X2 = guard3X1 + 1 * xSizeFactor
+        guard4X2 = guard4X1 + 1 * xSizeFactor
+        guard5X2 = guard5X1 + 1 * xSizeFactor
+        guard6X2 = guard6X1 + 1 * xSizeFactor
 
-        guard = rect 1 guardH
+        guard = rect xSizeFactor guardH
             |> filled black
-            |> move (0.5, guardH / 2 |> ceiling |> toFloat)
+            |> move (0.5 * xSizeFactor, guardH / 2 |> ceiling |> toFloat)
             |> moveY guard1Y1
         guard1 = guard |> moveX guard1X1
         guard2 = guard |> moveX guard2X1
@@ -279,14 +292,15 @@ displayBarcode xSizeFactor baseStr addonStr =
 
         addonX1 = baseX2 + addonDistX
         addonY1 = baseY1
-        addonW = String.length addonBin |> toFloat
+        addonW = String.length addonBin * xSizeFactor |> toFloat
         addonX2 = addonX1 + addonW
-        addonY2 = baseY2 - (1 + textHeight + 3)
+        addonY2 = baseY2 - (1 * xSizeFactor + textHeight + 3 * xSizeFactor)
         addonH = addonY2 - addonY1
 
         textAddonX1 = addonX1 + addonTextDistX
-        textAddonY1 = addonY2 + 3
-        textAddonX2 = addonX2 - 1
+        textAddonY1 = addonY2 + 3 * xSizeFactor
+        textAddonX2 = addonX2 - 1 * xSizeFactor
+        textAddonYC = textAddonY1 + textHeight / 2
 
         (strBaseSingle, strBaseLeft, strBaseRight) =
             baseInputToBarcodeString False baseStr |> splitBaseStr
@@ -301,18 +315,17 @@ displayBarcode xSizeFactor baseStr addonStr =
         mainForm = group [ base |> move (baseX1, baseY1),
                            guards,
                            addon |> move (addonX1, addonY1),
-                           textBaseSingle |> move (textBaseSingleX1, textBaseY1),
-                           textBaseLeft |> move (textBaseLeftX1, textBaseY1),
-                           textBaseRight |> move (textBaseRightX1, textBaseY1),
-                           textAddon |> move (textAddonX1, textAddonY1)
+                           textBaseSingle |> move (textBaseSingleX1, textBaseYC),
+                           textBaseLeft |> move (textBaseLeftX1, textBaseYC),
+                           textBaseRight |> move (textBaseRightX1, textBaseYC),
+                           textAddon |> move (textAddonX1, textAddonYC)
                          ]
 
     in  if String.isEmpty baseBin || (not <| addonOK addonStr)
         then empty
-        else collage (collageW + 4) (collageH + 5) [ mainForm
+        else collage (collageW + 4) (collageH + 4) [ mainForm
                     |> move (toFloat -collageW / 2,
                              toFloat -collageH / 2) ]
-
 
 splitBaseStr : String -> (String, String, String)
 splitBaseStr str = case String.length str of
@@ -327,7 +340,7 @@ showText textHeight str =
                    |> Text.height textHeight
                    |> leftAligned
         (w, h) = sizeOf elem
-    in elem |> toForm |> move (toFloat w / 2 - 1, toFloat h / 4)
+    in elem |> toForm |> move (toFloat w / 2, 2)
 
 displayBinary : Int -> Int -> Binary -> Form
 displayBinary xSizeFactor h bin =
