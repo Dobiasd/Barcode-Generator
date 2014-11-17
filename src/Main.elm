@@ -1,4 +1,4 @@
--- todo docstrings, links, type safety
+-- todo docstrings, type safety, margin, automated tests?
 
 module BarcodeGenerator where
 
@@ -121,6 +121,48 @@ generateBarcode base addon =
     in  (if baseOK base then generateEAN13 base' else "",
          if addonOK addon then generateAddon addon else "")
 
+{-| Input must have length 13.
+    http://en.wikipedia.org/wiki/International_Article_Number_%28EAN%29 -}
+generateEAN13 : String -> Binary
+generateEAN13 str =
+    let startGuard = "101"
+        middleGuard = "01010"
+        endGuard = "101"
+        front = String.left 7 str |> generateEAN13Front
+        back = String.right 6 str |> generateEAN13Back
+    in  startGuard ++ front ++ middleGuard ++ back ++ endGuard
+
+generateEAN13Front : String -> Binary
+generateEAN13Front str =
+    let (first, rest) = case String.uncons str of
+                            Just p -> p
+                            Nothing -> ('0', "")
+        parities = Dict.getOrFail first firstDigitToParities
+        charDicts = map (flip Dict.getOrFail parityToDigitsToBin) parities
+        chars = String.toList rest
+        binaries = zipWith Dict.getOrFail chars charDicts
+    in  String.concat binaries
+
+generateEAN13Back : String -> Binary
+generateEAN13Back str =
+    let chars = String.toList str
+        binaries = zipWith Dict.getOrFail chars <| repeat 6 upcDigitsToBinR
+    in  String.concat binaries
+
+{-| Input must have length 12. -}
+calcCheckDigit : String -> String
+calcCheckDigit str =
+    let vals = str |> String.reverse |> stringToDigitValues
+        s = calcCheckSum (3, 1) vals
+    in  if length vals == 12
+        then 10 - s `rem` 10 |> \x -> x `rem` 10 |> show
+        else ""
+
+stringToDigitValues = String.toList >>
+    filterMap ((\x -> [x]) >>
+        String.fromList >>
+        String.toInt)
+
 generateAddon : String -> Binary
 generateAddon str = case String.length str of
     0 -> ""
@@ -132,6 +174,7 @@ fromMaybe def m = case m of
     Just x -> x
     Nothing -> def
 
+{-| http://en.wikipedia.org/wiki/EAN_2 -}
 generateAddon2 : String -> Binary
 generateAddon2 str =
     let value = fromMaybe 0 <| String.toInt str
@@ -152,6 +195,18 @@ addon2Parities checksum = case checksum `rem` 4 of
     2 -> ['G', 'L']
     3 -> ['G', 'G']
 
+{-| http://en.wikipedia.org/wiki/EAN_2 -}
+generateAddon5 : String -> Binary
+generateAddon5 str =
+    let startGuard = "01011"
+        separator = "01"
+        digitValues = stringToDigitValues str
+        parities = addon5Parities <| calcCheckSum (3, 9) digitValues
+        charDicts = map (flip Dict.getOrFail parityToDigitsToBin) parities
+        chars = String.toList str
+        binaries = zipWith Dict.getOrFail chars charDicts
+    in startGuard ++ (intersperse separator binaries |> String.concat)
+
 addon5Parities : Int -> [Char]
 addon5Parities checksum = case checksum `rem` 10 of
     0 -> ['G', 'G', 'L', 'L', 'L']
@@ -165,41 +220,6 @@ addon5Parities checksum = case checksum `rem` 10 of
     8 -> ['L', 'G', 'L', 'L', 'G']
     9 -> ['L', 'L', 'G', 'L', 'G']
 
-generateAddon5 : String -> Binary
-generateAddon5 str =
-    let startGuard = "01011"
-        separator = "01"
-        digitValues = stringToDigitValues str
-        parities = addon5Parities <| calcCheckSum (3, 9) digitValues
-        charDicts = map (flip Dict.getOrFail parityToDigitsToBin) parities
-        chars = String.toList str
-        binaries = zipWith Dict.getOrFail chars charDicts
-    in startGuard ++ (intersperse separator binaries |> String.concat)
-
-{-| Input must have length 13. -}
-generateEAN13 : String -> Binary
-generateEAN13 str =
-    let startGuard = "101"
-        middleGuard = "01010"
-        endGuard = "101"
-        front = String.left 7 str |> generateEAN13Front
-        back = String.right 6 str |> generateEAN13Back
-    in  startGuard ++ front ++ middleGuard ++ back ++ endGuard
-
-{-| Input must have length 12. -}
-calcCheckDigit : String -> String
-calcCheckDigit str =
-    let vals = str |> String.reverse |> stringToDigitValues
-        s = calcCheckSum (3, 1) vals
-    in  if length vals == 12
-        then 10 - s `rem` 10 |> \x -> x `rem` 10 |> show
-        else ""
-
-stringToDigitValues = String.toList >>
-    filterMap ((\x -> [x]) >>
-        String.fromList >>
-        String.toInt)
-
 calcCheckSum : (Int, Int) -> [Int] -> Int
 calcCheckSum (m1, m2) xs =
     let xs' = if length xs `rem` 2 == 0 then xs else xs ++ [0]
@@ -212,22 +232,6 @@ nonOverlappingPairs l = case l of
     (x1::x2::xs) -> (x1,x2) :: nonOverlappingPairs xs
     _ -> []
 
-generateEAN13Front : String -> Binary
-generateEAN13Front str =
-    let (first, rest) = case String.uncons str of
-                            Just p -> p
-                            Nothing -> ('0', "")
-        parities = Dict.getOrFail first firstDigitToParities
-        charDicts = map (flip Dict.getOrFail parityToDigitsToBin) parities
-        chars = String.toList rest
-        binaries = zipWith Dict.getOrFail chars charDicts
-    in  String.concat binaries
-
-generateEAN13Back : String -> Binary
-generateEAN13Back str =
-    let chars = String.toList str
-        binaries = zipWith Dict.getOrFail chars <| repeat 6 upcDigitsToBinR
-    in  String.concat binaries
 
 -- todo all on one canvas for saving
 displayBarcode : Int -> String -> String -> Element
@@ -312,14 +316,15 @@ displayBarcode xSizeFactor baseStr addonStr =
         collageW = addonX2 |> ceiling
         collageH = baseY2 |> ceiling
 
-        mainForm = group [ base |> move (baseX1, baseY1),
-                           guards,
-                           addon |> move (addonX1, addonY1),
-                           textBaseSingle |> move (textBaseSingleX1, textBaseYC),
-                           textBaseLeft |> move (textBaseLeftX1, textBaseYC),
-                           textBaseRight |> move (textBaseRightX1, textBaseYC),
-                           textAddon |> move (textAddonX1, textAddonYC)
-                         ]
+        mainForm = group
+            [ base |> move (baseX1, baseY1),
+              guards,
+              addon |> move (addonX1, addonY1),
+              textBaseSingle |> move (textBaseSingleX1, textBaseYC),
+              textBaseLeft |> move (textBaseLeftX1, textBaseYC),
+              textBaseRight |> move (textBaseRightX1, textBaseYC),
+              textAddon |> move (textAddonX1, textAddonYC)
+            ]
 
     in  if String.isEmpty baseBin || (not <| addonOK addonStr)
         then empty
