@@ -1,7 +1,7 @@
 -- todo = [ split into modules,
 --          docstrings,
 --          type safety,
---          single canvas for saving ]
+--          single canvas for saving: https://groups.google.com/forum/?fromgroups#!topic/elm-discuss/U7KTUBSY904 ]
 
 module BarcodeGenerator where
 
