@@ -45,11 +45,11 @@ scene winW baseContentSig addonContentSig
                 defSpacer,
                 showGuardExtensionsCheck guardExtensions,
                 showAddonFullCheck addonFull
-            ] |> container winW 245 midTop,
+            ] |> container winW 200 midTop,
             defSpacer,
             flow right [
                 displayBarcode sizeFactor guardExtensions addonFull base addon
-            ] |> container winW 780 midTop
+            ] |> container winW 700 midTop
         ]
 
 showGuardExtensionsCheck : Bool -> Element
