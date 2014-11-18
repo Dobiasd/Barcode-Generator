@@ -1,4 +1,5 @@
--- todo docstrings, type safety, margin, automated tests?
+-- todo layout, docstrings, type safety, margin, automated tests?
+-- todo all on one canvas for saving
 
 module BarcodeGenerator where
 
@@ -7,14 +8,18 @@ import Regex
 import String
 import Text
 import Transform2D
-import Graphics.Input (Input, input, dropDown)
+import Graphics.Input (Input, input, dropDown, checkbox)
 import Graphics.Input.Field as Field
 
 main : Signal Element
-main = scene <~ baseContent.signal ~ addonContent.signal ~ sizeContent.signal
+main = scene <~ baseContent.signal
+              ~ addonContent.signal
+              ~ sizeContent.signal
+              ~ guardExtensionsCheck.signal
+              ~ addonFullCheck.signal
 
-scene : Field.Content -> Field.Content -> Int -> Element
-scene baseContentSig addonContentSig sizeFactor =
+scene : Field.Content -> Field.Content -> Int -> Bool -> Bool -> Element
+scene baseContentSig addonContentSig sizeFactor guardExtensions addonFull =
     let base = baseContentSig.string
         addon = addonContentSig.string
         showEdit h = Field.field Field.defaultStyle h identity
@@ -29,8 +34,16 @@ scene baseContentSig addonContentSig sizeFactor =
                 addonContentSig,
             dropDown sizeContent.handle sizeOptions,
             flow right [
+                container 30 30 middle <| checkbox guardExtensionsCheck.handle identity guardExtensions,
+                container 153 30 middle <| plainText "guard extensions"
+            ],
+            flow right [
+                container 30 30 middle <| checkbox addonFullCheck.handle identity addonFull,
+                container 150 30 middle <| plainText "full height addon"
+            ],
+            flow right [
                 spacer 100 1,
-                displayBarcode sizeFactor base addon
+                displayBarcode sizeFactor guardExtensions addonFull base addon
             ]
         ]
 
@@ -42,6 +55,12 @@ addonContent = input Field.noContent
 
 sizeContent : Input (Int)
 sizeContent = input 4
+
+guardExtensionsCheck : Input Bool
+guardExtensionsCheck = input True
+
+addonFullCheck : Input Bool
+addonFullCheck = input True
 
 sizeOptions : [(String, Int)]
 sizeOptions =
@@ -232,10 +251,8 @@ nonOverlappingPairs l = case l of
     (x1::x2::xs) -> (x1,x2) :: nonOverlappingPairs xs
     _ -> []
 
-
--- todo all on one canvas for saving
-displayBarcode : Int -> String -> String -> Element
-displayBarcode xSizeFactor baseStr addonStr =
+displayBarcode : Int -> Bool -> Bool -> String -> String -> Element
+displayBarcode xSizeFactor guardExtensions addonFull baseStr addonStr =
     let (baseBin, addonBin) = generateBarcode baseStr addonStr
         base = displayBinary xSizeFactor baseH baseBin
         addon = displayBinary xSizeFactor addonH addonBin
@@ -298,11 +315,15 @@ displayBarcode xSizeFactor baseStr addonStr =
         addonY1 = baseY1
         addonW = String.length addonBin * xSizeFactor |> toFloat
         addonX2 = addonX1 + addonW
-        addonY2 = baseY2 - (1 * xSizeFactor + textHeight + 3 * xSizeFactor)
+        addonY2 = if addonFull
+            then baseY2
+            else baseY2 - (1 * xSizeFactor + textHeight + 3 * xSizeFactor)
         addonH = addonY2 - addonY1
 
         textAddonX1 = addonX1 + addonTextDistX
-        textAddonY1 = addonY2 + 3 * xSizeFactor
+        textAddonY1 = if addonFull
+            then textBaseY1
+            else addonY2 + 3 * xSizeFactor
         textAddonX2 = addonX2 - 1 * xSizeFactor
         textAddonYC = textAddonY1 + textHeight / 2
 
@@ -318,13 +339,13 @@ displayBarcode xSizeFactor baseStr addonStr =
 
         mainForm = group
             [ base |> move (baseX1, baseY1),
-              guards,
+              if guardExtensions then guards else empty |> toForm,
               addon |> move (addonX1, addonY1),
               textBaseSingle |> move (textBaseSingleX1, textBaseYC),
               textBaseLeft |> move (textBaseLeftX1, textBaseYC),
               textBaseRight |> move (textBaseRightX1, textBaseYC),
               textAddon |> move (textAddonX1, textAddonYC)
-            ]
+            ] |> move (1, 2)
 
     in  if String.isEmpty baseBin || (not <| addonOK addonStr)
         then empty
