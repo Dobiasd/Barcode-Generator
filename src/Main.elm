@@ -1,4 +1,7 @@
--- todo = [ docstrings, type safety, single canvas for saving ]
+-- todo = [ split into modules,
+--          docstrings,
+--          type safety,
+--          single canvas for saving ]
 
 module BarcodeGenerator where
 
