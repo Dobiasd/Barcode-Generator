@@ -1,4 +1,3 @@
-Barcode-Generator
-=================
+# [EAN/UPC-A Barcode Generator (+ addon2/addon5)](http://daiw.de/apps/barcode_generator)
 
-Generate barcodes in your browser with real-time preview.
+With real-time preview.
