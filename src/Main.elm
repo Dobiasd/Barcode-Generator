@@ -1,5 +1,4 @@
--- todo layout, docstrings, type safety, margin, automated tests?
--- todo all on one canvas for saving
+-- todo = [ docstrings, type safety, single canvas for saving ]
 
 module BarcodeGenerator where
 
@@ -20,40 +19,55 @@ main = scene <~ Window.width
               ~ guardExtensionsCheck.signal
               ~ addonFullCheck.signal
 
-scene : Int -> Field.Content -> Field.Content -> Int -> Bool -> Bool -> Element
-scene winW baseContentSig addonContentSig sizeFactor guardExtensions addonFull =
+scene : Int -> Field.Content -> Field.Content ->
+        Int -> Bool -> Bool -> Element
+scene winW baseContentSig addonContentSig
+        sizeFactor guardExtensions addonFull =
     let w = 460
         base = baseContentSig.string
         addon = addonContentSig.string
+        defSpacer = spacer w 20
         showEdit h = Field.field Field.defaultStyle h identity
     in  flow down [
+            defSpacer,
+            plainText "EAN/UPC-A Barcode Generator (+ addon2/addon5)"
+                |> container winW 20 midTop,
             flow down [
-                spacer w 20,
-                plainText "EAN/UPC-A Barcode Generator (+ addon2/addon5)" |> container w 20 midTop,
-                spacer w 20,
+                defSpacer,
                 showEdit baseContent.handle
                     "base code: 11 or 12 digits"
                     baseContentSig,
                 showEdit addonContent.handle
                     "addon: 0, 2 or 5 digits"
                     addonContentSig,
-                spacer w 20,
+                defSpacer,
                 dropDown sizeContent.handle sizeOptions,
-                spacer w 20,
-                flow right [
-                    container 30 30 middle <| checkbox guardExtensionsCheck.handle identity guardExtensions,
-                    container 153 30 middle <| plainText "guard extensions"
-                ],
-                flow right [
-                    container 30 30 middle <| checkbox addonFullCheck.handle identity addonFull,
-                    container 150 30 middle <| plainText "full height addon"
-                ]
+                defSpacer,
+                showGuardExtensionsCheck guardExtensions,
+                showAddonFullCheck addonFull
             ] |> container winW 245 midTop,
-            spacer w 20,
+            defSpacer,
             flow right [
                 displayBarcode sizeFactor guardExtensions addonFull base addon
             ] |> container winW 780 midTop
         ]
+
+showGuardExtensionsCheck : Bool -> Element
+showGuardExtensionsCheck guardExtensions =
+    flow right [
+        checkbox guardExtensionsCheck.handle identity guardExtensions
+            |> container 30 30 middle,
+        plainText "guard extensions"
+            |> container 153 30 middle
+    ]
+
+showAddonFullCheck : Bool -> Element
+showAddonFullCheck addonFull = flow right [
+        checkbox addonFullCheck.handle identity addonFull
+            |> container 30 30 middle,
+        plainText "full height addon"
+            |> container 150 30 middle
+    ]
 
 baseContent : Input Field.Content
 baseContent = input Field.noContent
