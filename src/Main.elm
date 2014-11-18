@@ -364,7 +364,7 @@ displayBarcode xSizeFactor guardExtensions addonFull baseStr addonStr =
         collageW = addonX2 + border |> ceiling
         collageH = baseY2 + border |> ceiling
 
-        mainForm = group
+        mainFormRaw = group
             [ base |> move (baseX1, baseY1),
               if guardExtensions then guards else empty |> toForm,
               addon |> move (addonX1, addonY1),
@@ -374,12 +374,14 @@ displayBarcode xSizeFactor guardExtensions addonFull baseStr addonStr =
               textAddon |> move (textAddonX1, textAddonYC)
             ]
 
+        mainFormFinal = group [
+            rect (toFloat collageW) (toFloat collageH) |> filled white,
+                mainFormRaw |> move (toFloat -collageW / 2 + border / 2,
+                                     toFloat -collageH / 2 + border / 2) ]
+
     in  if String.isEmpty baseBin || (not <| addonOK addonStr)
         then empty
-        else collage collageW collageH [
-            rect (toFloat collageW) (toFloat collageH) |> filled white,
-                mainForm |> move (toFloat -collageW / 2 + border / 2,
-                                  toFloat -collageH / 2 + border / 2) ]
+        else collage collageW collageH [mainFormFinal]
 
 splitBaseStr : String -> (String, String, String)
 splitBaseStr str = case String.length str of
