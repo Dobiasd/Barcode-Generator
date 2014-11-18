@@ -10,41 +10,49 @@ import Text
 import Transform2D
 import Graphics.Input (Input, input, dropDown, checkbox)
 import Graphics.Input.Field as Field
+import Window
 
 main : Signal Element
-main = scene <~ baseContent.signal
+main = scene <~ Window.width
+             ~ baseContent.signal
               ~ addonContent.signal
               ~ sizeContent.signal
               ~ guardExtensionsCheck.signal
               ~ addonFullCheck.signal
 
-scene : Field.Content -> Field.Content -> Int -> Bool -> Bool -> Element
-scene baseContentSig addonContentSig sizeFactor guardExtensions addonFull =
-    let base = baseContentSig.string
+scene : Int -> Field.Content -> Field.Content -> Int -> Bool -> Bool -> Element
+scene winW baseContentSig addonContentSig sizeFactor guardExtensions addonFull =
+    let w = 460
+        base = baseContentSig.string
         addon = addonContentSig.string
         showEdit h = Field.field Field.defaultStyle h identity
     in  flow down [
-            spacer 640 1,
-            plainText "Barcode Generator",
-            showEdit baseContent.handle
-                "base code: 11 or 12 digits"
-                baseContentSig,
-            showEdit addonContent.handle
-                "addon: 0, 2 or 5 digits"
-                addonContentSig,
-            dropDown sizeContent.handle sizeOptions,
+            flow down [
+                spacer w 20,
+                plainText "EAN/UPC-A Barcode Generator (+ addon2/addon5)" |> container w 20 midTop,
+                spacer w 20,
+                showEdit baseContent.handle
+                    "base code: 11 or 12 digits"
+                    baseContentSig,
+                showEdit addonContent.handle
+                    "addon: 0, 2 or 5 digits"
+                    addonContentSig,
+                spacer w 20,
+                dropDown sizeContent.handle sizeOptions,
+                spacer w 20,
+                flow right [
+                    container 30 30 middle <| checkbox guardExtensionsCheck.handle identity guardExtensions,
+                    container 153 30 middle <| plainText "guard extensions"
+                ],
+                flow right [
+                    container 30 30 middle <| checkbox addonFullCheck.handle identity addonFull,
+                    container 150 30 middle <| plainText "full height addon"
+                ]
+            ] |> container winW 245 midTop,
+            spacer w 20,
             flow right [
-                container 30 30 middle <| checkbox guardExtensionsCheck.handle identity guardExtensions,
-                container 153 30 middle <| plainText "guard extensions"
-            ],
-            flow right [
-                container 30 30 middle <| checkbox addonFullCheck.handle identity addonFull,
-                container 150 30 middle <| plainText "full height addon"
-            ],
-            flow right [
-                spacer 100 1,
                 displayBarcode sizeFactor guardExtensions addonFull base addon
-            ]
+            ] |> container winW 780 midTop
         ]
 
 baseContent : Input Field.Content
@@ -67,8 +75,7 @@ sizeOptions =
     [ ("normal", 4),
       ("smallest", 1),
       ("small", 2),
-      ("large", 8),
-      ("huge", 16)
+      ("large", 8)
     ]
 
 type Binary = String
@@ -258,7 +265,9 @@ displayBarcode xSizeFactor guardExtensions addonFull baseStr addonStr =
         addon = displayBinary xSizeFactor addonH addonBin
         textBaseDistY = 3 * xSizeFactor
         addonDistX = 12 * xSizeFactor
-        addonTextDistX = 10 * xSizeFactor
+        addonTextDistX = if String.length addonStr == 2
+            then 8 * xSizeFactor
+            else 12 * xSizeFactor
 
         textHeight = 10 * xSizeFactor
 
@@ -334,8 +343,9 @@ displayBarcode xSizeFactor guardExtensions addonFull baseStr addonStr =
         textBaseRight = showText textHeight strBaseRight
         textAddon = showText textHeight addonStr
 
-        collageW = addonX2 |> ceiling
-        collageH = baseY2 |> ceiling
+        border = 6 * xSizeFactor
+        collageW = addonX2 + border |> ceiling
+        collageH = baseY2 + border |> ceiling
 
         mainForm = group
             [ base |> move (baseX1, baseY1),
@@ -345,13 +355,14 @@ displayBarcode xSizeFactor guardExtensions addonFull baseStr addonStr =
               textBaseLeft |> move (textBaseLeftX1, textBaseYC),
               textBaseRight |> move (textBaseRightX1, textBaseYC),
               textAddon |> move (textAddonX1, textAddonYC)
-            ] |> move (1, 2)
+            ]
 
     in  if String.isEmpty baseBin || (not <| addonOK addonStr)
         then empty
-        else collage (collageW + 4) (collageH + 4) [ mainForm
-                    |> move (toFloat -collageW / 2,
-                             toFloat -collageH / 2) ]
+        else collage collageW collageH [
+            rect (toFloat collageW) (toFloat collageH) |> filled white,
+                mainForm |> move (toFloat -collageW / 2 + border / 2,
+                                  toFloat -collageH / 2 + border / 2) ]
 
 splitBaseStr : String -> (String, String, String)
 splitBaseStr str = case String.length str of
