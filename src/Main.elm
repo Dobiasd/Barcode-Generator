@@ -23,11 +23,12 @@ main = scene <~ Window.width
               ~ fontContent.signal
               ~ guardExtensionsCheck.signal
               ~ addonFullCheck.signal
+              ~ lightMarginIndicatorCheck.signal
 
 scene : Int -> Field.Content -> Field.Content ->
-        Int -> String -> Bool -> Bool -> Element
+        Int -> String -> Bool -> Bool -> Bool -> Element
 scene winW baseContentSig addonContentSig
-        sizeFactor font guardExtensions addonFull =
+        sizeFactor font guardExtensions addonFull lightMarginIndicator =
     let w = 460
         base = baseContentSig.string
         addon = addonContentSig.string
@@ -35,7 +36,9 @@ scene winW baseContentSig addonContentSig
         showEdit h = Field.field Field.defaultStyle h identity
     in  flow down [
             defSpacer,
-            plainText "EAN/UPC-A Barcode Generator (+ addon2/addon5)"
+            toText "EAN/UPC-A Barcode Generator (+ addon2/addon5)"
+                |> bold
+                |> leftAligned
                 |> container winW 20 midTop,
             flow down [
                 defSpacer,
@@ -57,12 +60,13 @@ scene winW baseContentSig addonContentSig
                 ],
                 defSpacer,
                 showGuardExtensionsCheck guardExtensions,
-                showAddonFullCheck addonFull
-            ] |> container winW 230 midTop,
+                showAddonFullCheck addonFull,
+                showLightMarginIndicatorCheck lightMarginIndicator
+            ] |> container winW 250 midTop,
             defSpacer,
             flow right [
                 displayBarcode sizeFactor guardExtensions addonFull
-                                   font base addon
+                                   lightMarginIndicator font base addon
             ] |> container winW 700 midTop
         ]
 
@@ -83,6 +87,16 @@ showAddonFullCheck addonFull = flow right [
             |> container 150 30 middle
     ]
 
+showLightMarginIndicatorCheck : Bool -> Element
+showLightMarginIndicatorCheck lightMarginIndicator = flow right [
+        checkbox lightMarginIndicatorCheck.handle identity lightMarginIndicator
+            |> container 30 30 middle,
+        plainText "light margin indicator"
+            |> container 180 30 middle
+    ]
+
+
+
 baseContent : Input Field.Content
 baseContent = input Field.noContent
 
@@ -100,6 +114,9 @@ guardExtensionsCheck = input True
 
 addonFullCheck : Input Bool
 addonFullCheck = input True
+
+lightMarginIndicatorCheck : Input Bool
+lightMarginIndicatorCheck = input True
 
 sizeOptions : [(String, Int)]
 sizeOptions =
@@ -295,16 +312,18 @@ nonOverlappingPairs l = case l of
     (x1::x2::xs) -> (x1,x2) :: nonOverlappingPairs xs
     _ -> []
 
-displayBarcode : Int -> Bool -> Bool -> String -> String -> String -> Element
-displayBarcode xSizeFactor guardExtensions addonFull font baseStr addonStr =
+displayBarcode : Int -> Bool -> Bool -> Bool ->
+                 String -> String -> String -> Element
+displayBarcode xSizeFactor guardExtensions addonFull lightMarginIndicators
+               font baseStr addonStr =
     let (baseBin, addonBin) = generateBarcode baseStr addonStr
         base = displayBinary xSizeFactor baseH baseBin
         addon = displayBinary xSizeFactor addonH addonBin
         textBaseDistY = 3 * xSizeFactor
-        addonDistX = 12 * xSizeFactor
+        addonDistX = 14 * xSizeFactor
         addonTextDistX = if String.length addonStr == 2
-            then 8 * xSizeFactor
-            else 12 * xSizeFactor
+            then 10 * xSizeFactor
+            else 19 * xSizeFactor
 
         textHeight = 7 * xSizeFactor
 
@@ -324,7 +343,8 @@ displayBarcode xSizeFactor guardExtensions addonFull font baseStr addonStr =
         textBaseY2 = textHeight
         textBaseYC = (textBaseY2 - textBaseY1) / 2
 
-        textBaseSingleX1 = 0 * xSizeFactor
+        textBaseLeftSingleX1 = 0 * xSizeFactor
+        textBaseRightSingleX1 = baseX2 + 3 * xSizeFactor
 
         textBaseLeftX1 = guard2X2 + 3 * xSizeFactor
         --textBaseLeftX2 = guard3X1 - 3
@@ -373,24 +393,38 @@ displayBarcode xSizeFactor guardExtensions addonFull font baseStr addonStr =
         textAddonX2 = addonX2 - 1 * xSizeFactor
         textAddonYC = textAddonY1 + textHeight / 2
 
-        (strBaseSingle, strBaseLeft, strBaseRight) =
-            baseInputToBarcodeString False baseStr |> splitBaseStr
-        textBaseSingle = showText font textHeight strBaseSingle
+        addRightBaseLightMarginIndicator =
+            lightMarginIndicators && String.isEmpty addonBin
+
+        (strBaseLeftSingle, strBaseLeft, strBaseRight, strBaseRightSingle) =
+            baseInputToBarcodeString False baseStr
+            |> splitBaseStr addRightBaseLightMarginIndicator
+        textBaseLeftSingle = showText font textHeight strBaseLeftSingle
         textBaseLeft = showText font textHeight strBaseLeft
         textBaseRight = showText font textHeight strBaseRight
-        textAddon = showText font textHeight addonStr
+        textBaseRightSingle = showText font textHeight strBaseRightSingle
+        textAddon = (addonStr ++ if lightMarginIndicators && (not <| String.isEmpty addonBin) then " >" else "")
+                        |> showText font textHeight
 
-        border = 6 * xSizeFactor
-        collageW = addonX2 + border |> ceiling
+        border = 2 * xSizeFactor
+        collageW = addonX2 + border + 100 |> ceiling
         collageH = baseY2 + border |> ceiling
+
+        baseTextLeftOffsetX = if String.length strBaseLeft == 5
+                              then 3 * xSizeFactor else 0
+        baseTextRightOffsetX = if String.length strBaseRight == 5
+                               then 3 * xSizeFactor else 0
 
         mainFormRaw = group
             [ base |> move (baseX1, baseY1),
               if guardExtensions then guards else empty |> toForm,
               addon |> move (addonX1, addonY1),
-              textBaseSingle |> move (textBaseSingleX1, textBaseYC),
-              textBaseLeft |> move (textBaseLeftX1, textBaseYC),
-              textBaseRight |> move (textBaseRightX1, textBaseYC),
+              textBaseLeftSingle |> move (textBaseLeftSingleX1, textBaseYC),
+              textBaseLeft
+                  |> move (textBaseLeftX1 + baseTextLeftOffsetX, textBaseYC),
+              textBaseRight
+                  |> move (textBaseRightX1 + baseTextRightOffsetX, textBaseYC),
+              textBaseRightSingle |> move (textBaseRightSingleX1, textBaseYC),
               textAddon |> move (textAddonX1, textAddonYC)
             ]
 
@@ -403,11 +437,14 @@ displayBarcode xSizeFactor guardExtensions addonFull font baseStr addonStr =
         then empty
         else collage collageW collageH [mainFormFinal]
 
-splitBaseStr : String -> (String, String, String)
-splitBaseStr str = case String.length str of
-    12 -> ("",                    String.slice 0 6 str, String.slice 6 12 str)
-    13 -> (String.slice 0 1 str , String.slice 1 7 str, String.slice 7 13 str)
-    otherwise -> ("", "", "")
+splitBaseStr : Bool -> String -> (String, String, String, String)
+splitBaseStr addRightLightMarginIndicator str =
+    let slc start end = String.slice start end str
+        right13 = if addRightLightMarginIndicator then ">" else ""
+    in  case String.length str of
+    12 -> (slc 0 1, slc 1 6, slc 6 11, slc 11 12)
+    13 -> (slc 0 1 , slc 1 7, slc 7 13, right13)
+    otherwise -> ("", "", "", "")
 
 (digitImageWidth, digitImageHeight) = (140, 164)
 
@@ -429,10 +466,18 @@ stringToListOfCharStrings =
 
 digitImage : String -> Float -> String -> Form
 digitImage font scaleFactor digit =
-    let url = Debug.log "asd" <| "fonts/" ++ font ++ "/" ++ digit ++ ".png"
-        w = digitImageWidth |> toFloat |> \x -> x * scaleFactor |> round
+    let w = digitImageWidth |> toFloat |> \x -> x * scaleFactor |> round
         h = digitImageHeight |> toFloat |> \x -> x * scaleFactor |> round
-    in  image w h url |> toForm
+    in  image w h (digitUrl font digit) |> toForm
+
+digitUrl : String -> String -> String
+digitUrl font digit =
+    let fileName = case digit of
+                       "<" -> "left"
+                       ">" -> "right"
+                       " " -> "space"
+                       otherwise -> digit
+    in  "fonts/" ++ font ++ "/" ++ fileName ++ ".png"
 
 displayBinary : Int -> Int -> Binary -> Form
 displayBinary xSizeFactor h bin =
