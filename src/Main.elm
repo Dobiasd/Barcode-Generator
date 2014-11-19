@@ -5,6 +5,7 @@
 
 module BarcodeGenerator where
 
+import Debug
 import Dict
 import Regex
 import String
@@ -19,13 +20,14 @@ main = scene <~ Window.width
              ~ baseContent.signal
               ~ addonContent.signal
               ~ sizeContent.signal
+              ~ fontContent.signal
               ~ guardExtensionsCheck.signal
               ~ addonFullCheck.signal
 
 scene : Int -> Field.Content -> Field.Content ->
-        Int -> Bool -> Bool -> Element
+        Int -> String -> Bool -> Bool -> Element
 scene winW baseContentSig addonContentSig
-        sizeFactor guardExtensions addonFull =
+        sizeFactor font guardExtensions addonFull =
     let w = 460
         base = baseContentSig.string
         addon = addonContentSig.string
@@ -44,14 +46,23 @@ scene winW baseContentSig addonContentSig
                     "addon: 0, 2 or 5 digits"
                     addonContentSig,
                 defSpacer,
-                dropDown sizeContent.handle sizeOptions,
+                flow right [
+                    plainText "Size: ",
+                    dropDown sizeContent.handle sizeOptions
+                ],
+                defSpacer,
+                flow right [
+                    plainText "Font: ",
+                    dropDown fontContent.handle fontOptions
+                ],
                 defSpacer,
                 showGuardExtensionsCheck guardExtensions,
                 showAddonFullCheck addonFull
-            ] |> container winW 200 midTop,
+            ] |> container winW 230 midTop,
             defSpacer,
             flow right [
-                displayBarcode sizeFactor guardExtensions addonFull base addon
+                displayBarcode sizeFactor guardExtensions addonFull
+                                   font base addon
             ] |> container winW 700 midTop
         ]
 
@@ -81,6 +92,9 @@ addonContent = input Field.noContent
 sizeContent : Input (Int)
 sizeContent = input 4
 
+fontContent : Input (String)
+fontContent = input "OCR-B"
+
 guardExtensionsCheck : Input Bool
 guardExtensionsCheck = input True
 
@@ -93,6 +107,12 @@ sizeOptions =
       ("smallest", 1),
       ("small", 2),
       ("large", 8)
+    ]
+
+fontOptions : [(String, String)]
+fontOptions =
+    [ ("OCR-B", "OCR-B"),
+      ("OCR-A", "OCR-A")
     ]
 
 type Binary = String
@@ -275,8 +295,8 @@ nonOverlappingPairs l = case l of
     (x1::x2::xs) -> (x1,x2) :: nonOverlappingPairs xs
     _ -> []
 
-displayBarcode : Int -> Bool -> Bool -> String -> String -> Element
-displayBarcode xSizeFactor guardExtensions addonFull baseStr addonStr =
+displayBarcode : Int -> Bool -> Bool -> String -> String -> String -> Element
+displayBarcode xSizeFactor guardExtensions addonFull font baseStr addonStr =
     let (baseBin, addonBin) = generateBarcode baseStr addonStr
         base = displayBinary xSizeFactor baseH baseBin
         addon = displayBinary xSizeFactor addonH addonBin
@@ -286,7 +306,7 @@ displayBarcode xSizeFactor guardExtensions addonFull baseStr addonStr =
             then 8 * xSizeFactor
             else 12 * xSizeFactor
 
-        textHeight = 10 * xSizeFactor
+        textHeight = 7 * xSizeFactor
 
         baseX1 = 10 * xSizeFactor
         baseY1 = textHeight + textBaseDistY
@@ -355,10 +375,10 @@ displayBarcode xSizeFactor guardExtensions addonFull baseStr addonStr =
 
         (strBaseSingle, strBaseLeft, strBaseRight) =
             baseInputToBarcodeString False baseStr |> splitBaseStr
-        textBaseSingle = showText textHeight strBaseSingle
-        textBaseLeft = showText textHeight strBaseLeft
-        textBaseRight = showText textHeight strBaseRight
-        textAddon = showText textHeight addonStr
+        textBaseSingle = showText font textHeight strBaseSingle
+        textBaseLeft = showText font textHeight strBaseLeft
+        textBaseRight = showText font textHeight strBaseRight
+        textAddon = showText font textHeight addonStr
 
         border = 6 * xSizeFactor
         collageW = addonX2 + border |> ceiling
@@ -389,21 +409,36 @@ splitBaseStr str = case String.length str of
     13 -> (String.slice 0 1 str , String.slice 1 7 str, String.slice 7 13 str)
     otherwise -> ("", "", "")
 
-showText : Float -> String -> Form
-showText textHeight str =
-    let elem = str |> toText
-                   |> monospace
-                   |> Text.height textHeight
-                   |> leftAligned
-        (w, h) = sizeOf elem
-    in elem |> toForm |> move (toFloat w / 2, 2)
+(digitImageWidth, digitImageHeight) = (140, 164)
+
+showText : String -> Float -> String -> Form
+showText font textHeight str =
+    let frms = stringToListOfCharStrings str |> map (digitImage font scaleF)
+        scaleF = textHeight / toFloat digitImageHeight
+        distX = toFloat digitImageWidth * scaleF
+    in  lineUp distX frms |> moveX (toFloat digitImageWidth * scaleF / 2)
+
+lineUp : Float -> [Form] -> Form
+lineUp distX forms =
+    let xs = [ 0 .. length forms ] |> map toFloat |> map (\x -> x * distX)
+    in zipWith (\frm x -> moveX x frm) forms xs |> group
+
+stringToListOfCharStrings : String -> [String]
+stringToListOfCharStrings =
+    String.toList >> map (\x -> String.cons x "")
+
+digitImage : String -> Float -> String -> Form
+digitImage font scaleFactor digit =
+    let url = Debug.log "asd" <| "fonts/" ++ font ++ "/" ++ digit ++ ".png"
+        w = digitImageWidth |> toFloat |> \x -> x * scaleFactor |> round
+        h = digitImageHeight |> toFloat |> \x -> x * scaleFactor |> round
+    in  image w h url |> toForm
 
 displayBinary : Int -> Int -> Binary -> Form
 displayBinary xSizeFactor h bin =
     let frms = map (showBinChar xSizeFactor h) <| String.toList bin
         w = String.length bin
-        xs = [0 .. w] |> map (\x -> xSizeFactor * x) |> map toFloat
-    in  zipWith (\f x -> moveX x f) frms xs |> group
+    in  lineUp (toFloat xSizeFactor) frms
 
 showBinChar : Int -> Int -> Char -> Form
 showBinChar w h c =
