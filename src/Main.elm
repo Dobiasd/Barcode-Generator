@@ -67,7 +67,7 @@ scene winW baseContentSig addonContentSig
             flow right [
                 displayBarcode sizeFactor guardExtensions addonFull
                                    lightMarginIndicator font base addon
-            ] |> container winW 700 midTop
+            ] |> container winW 630 midTop
         ]
 
 showGuardExtensionsCheck : Bool -> Element
