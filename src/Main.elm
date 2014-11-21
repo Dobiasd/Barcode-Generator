@@ -64,10 +64,13 @@ scene winW baseContentSig addonContentSig
                 showLightMarginIndicatorCheck lightMarginIndicator
             ] |> container winW 250 midTop,
             defSpacer,
-            flow right [
-                displayBarcode sizeFactor guardExtensions addonFull
-                                   lightMarginIndicator font base addon
-            ] |> container winW 630 midTop
+            flow down [
+                defSpacer,
+                flow right [
+                    displayBarcode sizeFactor guardExtensions addonFull
+                                       lightMarginIndicator font base addon
+                ]
+            ] |> container winW 650 midTop |> color lightGrey
         ]
 
 showGuardExtensionsCheck : Bool -> Element
@@ -407,7 +410,7 @@ displayBarcode xSizeFactor guardExtensions addonFull lightMarginIndicators
                         |> showText font textHeight
 
         border = 2 * xSizeFactor
-        collageW = addonX2 + border + 100 |> ceiling
+        collageW = addonX2 + border + 13 * xSizeFactor |> ceiling
         collageH = baseY2 + border |> ceiling
 
         baseTextLeftOffsetX = if String.length strBaseLeft == 5
