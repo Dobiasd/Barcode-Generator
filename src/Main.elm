@@ -42,7 +42,7 @@ scene : Int -> Field.Content -> Field.Content ->
         Int -> String -> Bool -> Bool -> Bool -> Element
 scene winW baseContentSig addonContentSig
         sizeFactor font guardExtensions addonFull lightMarginIndicator =
-    let w = 460
+    let w = 600
         base = baseContentSig.string
         addon = addonContentSig.string
         defSpacer = spacer w 20
@@ -61,6 +61,8 @@ scene winW baseContentSig addonContentSig
                 showEdit (Signal.send addonContent)
                     "addon: 0, 2 or 5 digits"
                     addonContentSig,
+                plainText
+                  "(enter base code without check digit, i.e. the last printed digit)",
                 defSpacer,
                 flow right [
                     plainText "Size: ",
