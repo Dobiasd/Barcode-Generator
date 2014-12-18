@@ -7,23 +7,36 @@ module BarcodeGenerator where
 
 import Debug
 import Dict
+import Maybe(withDefault, Maybe)
+import Maybe
 import Regex
+import Result
 import String
 import Text
+import List
+import List((::))
+import Text(plainText)
 import Transform2D
-import Graphics.Input (Input, input, dropDown, checkbox)
+import Graphics.Input (dropDown, checkbox)
+import Graphics.Element (Element, spacer, flow, down, right, container, midTop
+  , color, middle, empty, image)
+import Graphics.Collage (rect, filled, move, moveX, moveY, group, toForm
+  , collage, Form)
+import Color (lightGrey, black, white)
+import Signal
+import Signal(Signal, (<~), (~))
 import Graphics.Input.Field as Field
 import Window
 
 main : Signal Element
 main = scene <~ Window.width
-             ~ baseContent.signal
-              ~ addonContent.signal
-              ~ sizeContent.signal
-              ~ fontContent.signal
-              ~ guardExtensionsCheck.signal
-              ~ addonFullCheck.signal
-              ~ lightMarginIndicatorCheck.signal
+              ~ Signal.subscribe baseContent
+              ~ Signal.subscribe addonContent
+              ~ Signal.subscribe sizeContent
+              ~ Signal.subscribe fontContent
+              ~ Signal.subscribe guardExtensionsCheck
+              ~ Signal.subscribe addonFullCheck
+              ~ Signal.subscribe lightMarginIndicatorCheck
 
 scene : Int -> Field.Content -> Field.Content ->
         Int -> String -> Bool -> Bool -> Bool -> Element
@@ -33,30 +46,30 @@ scene winW baseContentSig addonContentSig
         base = baseContentSig.string
         addon = addonContentSig.string
         defSpacer = spacer w 20
-        showEdit h = Field.field Field.defaultStyle h identity
+        showEdit h = Field.field Field.defaultStyle h
     in  flow down [
             defSpacer,
-            toText "EAN/UPC-A Barcode Generator (+ addon2/addon5)"
-                |> bold
-                |> leftAligned
+            Text.fromString "EAN/UPC-A Barcode Generator (+ addon2/addon5)"
+                |> Text.bold
+                |> Text.leftAligned
                 |> container winW 20 midTop,
             flow down [
                 defSpacer,
-                showEdit baseContent.handle
+                showEdit (Signal.send baseContent)
                     "base code: 11 or 12 digits"
                     baseContentSig,
-                showEdit addonContent.handle
+                showEdit (Signal.send addonContent)
                     "addon: 0, 2 or 5 digits"
                     addonContentSig,
                 defSpacer,
                 flow right [
                     plainText "Size: ",
-                    dropDown sizeContent.handle sizeOptions
+                    dropDown (Signal.send sizeContent) sizeOptions
                 ],
                 defSpacer,
                 flow right [
                     plainText "Font: ",
-                    dropDown fontContent.handle fontOptions
+                    dropDown (Signal.send fontContent) fontOptions
                 ],
                 defSpacer,
                 showGuardExtensionsCheck guardExtensions,
@@ -76,7 +89,7 @@ scene winW baseContentSig addonContentSig
 showGuardExtensionsCheck : Bool -> Element
 showGuardExtensionsCheck guardExtensions =
     flow right [
-        checkbox guardExtensionsCheck.handle identity guardExtensions
+        checkbox (Signal.send guardExtensionsCheck) guardExtensions
             |> container 30 30 middle,
         plainText "guard extensions"
             |> container 153 30 middle
@@ -84,7 +97,7 @@ showGuardExtensionsCheck guardExtensions =
 
 showAddonFullCheck : Bool -> Element
 showAddonFullCheck addonFull = flow right [
-        checkbox addonFullCheck.handle identity addonFull
+        checkbox (Signal.send addonFullCheck) addonFull
             |> container 30 30 middle,
         plainText "full height addon"
             |> container 150 30 middle
@@ -92,7 +105,7 @@ showAddonFullCheck addonFull = flow right [
 
 showLightMarginIndicatorCheck : Bool -> Element
 showLightMarginIndicatorCheck lightMarginIndicator = flow right [
-        checkbox lightMarginIndicatorCheck.handle identity lightMarginIndicator
+        checkbox (Signal.send lightMarginIndicatorCheck) lightMarginIndicator
             |> container 30 30 middle,
         plainText "light margin indicator"
             |> container 180 30 middle
@@ -100,28 +113,28 @@ showLightMarginIndicatorCheck lightMarginIndicator = flow right [
 
 
 
-baseContent : Input Field.Content
-baseContent = input Field.noContent
+baseContent : Signal.Channel Field.Content
+baseContent = Signal.channel Field.noContent
 
-addonContent : Input Field.Content
-addonContent = input Field.noContent
+addonContent : Signal.Channel Field.Content
+addonContent = Signal.channel Field.noContent
 
-sizeContent : Input (Int)
-sizeContent = input 4
+sizeContent : Signal.Channel (Int)
+sizeContent = Signal.channel 4
 
-fontContent : Input (String)
-fontContent = input "OCR-B"
+fontContent : Signal.Channel (String)
+fontContent = Signal.channel "OCR-B"
 
-guardExtensionsCheck : Input Bool
-guardExtensionsCheck = input True
+guardExtensionsCheck : Signal.Channel Bool
+guardExtensionsCheck = Signal.channel True
 
-addonFullCheck : Input Bool
-addonFullCheck = input True
+addonFullCheck : Signal.Channel Bool
+addonFullCheck = Signal.channel True
 
-lightMarginIndicatorCheck : Input Bool
-lightMarginIndicatorCheck = input True
+lightMarginIndicatorCheck : Signal.Channel Bool
+lightMarginIndicatorCheck = Signal.channel True
 
-sizeOptions : [(String, Int)]
+sizeOptions : List (String, Int)
 sizeOptions =
     [ ("normal", 4),
       ("smallest", 1),
@@ -129,13 +142,13 @@ sizeOptions =
       ("large", 8)
     ]
 
-fontOptions : [(String, String)]
+fontOptions : List (String, String)
 fontOptions =
     [ ("OCR-B", "OCR-B"),
       ("OCR-A", "OCR-A")
     ]
 
-type Binary = String
+type alias Binary = String
 
 upcDigitsToBinL : Dict.Dict Char Binary
 upcDigitsToBinL = [
@@ -150,7 +163,7 @@ upcDigitsToBinL = [
     ('8', "0110111"),
     ('9', "0001011") ] |> Dict.fromList
 
-firstDigitToParities : Dict.Dict Char [Char]
+firstDigitToParities : Dict.Dict Char (List Char)
 firstDigitToParities = [
     ('0', "LLLLLL"),
     ('1', "LLGLGG"),
@@ -161,13 +174,16 @@ firstDigitToParities = [
     ('6', "LGGGLL"),
     ('7', "LGLGLG"),
     ('8', "LGLGGL"),
-    ('9', "LGGLGL") ] |> Dict.fromList |> Dict.map String.toList
+    ('9', "LGGLGL") ] |> Dict.fromList |> dictMapValues String.toList
+
+dictMapValues : (v -> w) -> Dict.Dict comparable v -> Dict.Dict comparable w
+dictMapValues f d = Dict.map (\k v -> f v) d
 
 upcDigitsToBinR : Dict.Dict Char Binary
-upcDigitsToBinR = Dict.map invertBinaryStr upcDigitsToBinL
+upcDigitsToBinR = dictMapValues invertBinaryStr upcDigitsToBinL
 
 upcDigitsToBinG : Dict.Dict Char Binary
-upcDigitsToBinG = Dict.map String.reverse upcDigitsToBinR
+upcDigitsToBinG = dictMapValues String.reverse upcDigitsToBinR
 
 parityToDigitsToBin : Dict.Dict Char (Dict.Dict Char Binary)
 parityToDigitsToBin = [
@@ -215,21 +231,26 @@ generateEAN13 str =
         back = String.right 6 str |> generateEAN13Back
     in  startGuard ++ front ++ middleGuard ++ back ++ endGuard
 
+getOrFail : comparable -> Dict.Dict comparable v -> v
+getOrFail key dict =
+  case Dict.get key dict of
+    Maybe.Just res -> res
+
 generateEAN13Front : String -> Binary
 generateEAN13Front str =
     let (first, rest) = case String.uncons str of
-                            Just p -> p
-                            Nothing -> ('0', "")
-        parities = Dict.getOrFail first firstDigitToParities
-        charDicts = map (flip Dict.getOrFail parityToDigitsToBin) parities
+                            Maybe.Just p -> p
+                            Maybe.Nothing -> ('0', "")
+        parities = getOrFail first firstDigitToParities
+        charDicts = List.map (flip getOrFail parityToDigitsToBin) parities
         chars = String.toList rest
-        binaries = zipWith Dict.getOrFail chars charDicts
+        binaries = List.map2 getOrFail chars charDicts
     in  String.concat binaries
 
 generateEAN13Back : String -> Binary
 generateEAN13Back str =
     let chars = String.toList str
-        binaries = zipWith Dict.getOrFail chars <| repeat 6 upcDigitsToBinR
+        binaries = List.map2 getOrFail chars <| List.repeat 6 upcDigitsToBinR
     in  String.concat binaries
 
 {-| Input must have length 12. -}
@@ -237,14 +258,15 @@ calcCheckDigit : String -> String
 calcCheckDigit str =
     let vals = str |> String.reverse |> stringToDigitValues
         s = calcCheckSum (3, 1) vals
-    in  if length vals == 12
-        then 10 - s `rem` 10 |> \x -> x `rem` 10 |> show
+    in  if List.length vals == 12
+        then 10 - s `rem` 10 |> \x -> x `rem` 10 |> toString
         else ""
 
 stringToDigitValues = String.toList >>
-    filterMap ((\x -> [x]) >>
+    List.filterMap ((\x -> [x]) >>
         String.fromList >>
-        String.toInt)
+        String.toInt
+        >> Result.toMaybe)
 
 generateAddon : String -> Binary
 generateAddon str = case String.length str of
@@ -254,24 +276,27 @@ generateAddon str = case String.length str of
 
 fromMaybe : a -> Maybe a -> a
 fromMaybe def m = case m of
-    Just x -> x
-    Nothing -> def
+    Maybe.Just x -> x
+    Maybe.Nothing -> def
+
+last : List a -> a
+last = List.reverse >> List.head
 
 {-| http://en.wikipedia.org/wiki/EAN_2 -}
 generateAddon2 : String -> Binary
 generateAddon2 str =
-    let value = fromMaybe 0 <| String.toInt str
+    let value = String.toInt str |> Result.toMaybe |> fromMaybe 0
         chars = String.toList str
         startGuard = "01011"
         middleGuard = "01"
         parities = addon2Parities value
-        digitsToBins = map (flip Dict.getOrFail parityToDigitsToBin) parities
-        binaries = zipWith Dict.getOrFail chars digitsToBins
-        front = head binaries
+        digitsToBins = List.map (flip getOrFail parityToDigitsToBin) parities
+        binaries = List.map2 getOrFail chars digitsToBins
+        front = List.head binaries
         back = last binaries
     in  startGuard ++ front ++ middleGuard ++ back
 
-addon2Parities : Int -> [Char]
+addon2Parities : Int -> List Char
 addon2Parities checksum = case checksum `rem` 4 of
     0 -> ['L', 'L']
     1 -> ['L', 'G']
@@ -285,12 +310,12 @@ generateAddon5 str =
         separator = "01"
         digitValues = stringToDigitValues str
         parities = addon5Parities <| calcCheckSum (3, 9) digitValues
-        charDicts = map (flip Dict.getOrFail parityToDigitsToBin) parities
+        charDicts = List.map (flip getOrFail parityToDigitsToBin) parities
         chars = String.toList str
-        binaries = zipWith Dict.getOrFail chars charDicts
-    in startGuard ++ (intersperse separator binaries |> String.concat)
+        binaries = List.map2 getOrFail chars charDicts
+    in startGuard ++ (List.intersperse separator binaries |> String.concat)
 
-addon5Parities : Int -> [Char]
+addon5Parities : Int -> List Char
 addon5Parities checksum = case checksum `rem` 10 of
     0 -> ['G', 'G', 'L', 'L', 'L']
     1 -> ['G', 'L', 'G', 'L', 'L']
@@ -303,14 +328,14 @@ addon5Parities checksum = case checksum `rem` 10 of
     8 -> ['L', 'G', 'L', 'L', 'G']
     9 -> ['L', 'L', 'G', 'L', 'G']
 
-calcCheckSum : (Int, Int) -> [Int] -> Int
+calcCheckSum : (Int, Int) -> List Int -> Int
 calcCheckSum (m1, m2) xs =
-    let xs' = if length xs `rem` 2 == 0 then xs else xs ++ [0]
+    let xs' = if List.length xs `rem` 2 == 0 then xs else xs ++ [0]
         f (a, b) = m1 * a + m2 * b
-    in  xs' |> nonOverlappingPairs |> map f |> sum
+    in  xs' |> nonOverlappingPairs |> List.map f |> List.sum
 
 {-| nonOverlappingPairs [1,2,3,4,5] === [(1,2),(3,4)] -}
-nonOverlappingPairs : [a] -> [(a,a)]
+nonOverlappingPairs : List a -> List (a,a)
 nonOverlappingPairs l = case l of
     (x1::x2::xs) -> (x1,x2) :: nonOverlappingPairs xs
     _ -> []
@@ -453,19 +478,22 @@ splitBaseStr addRightLightMarginIndicator str =
 
 showText : String -> Float -> String -> Form
 showText font textHeight str =
-    let frms = stringToListOfCharStrings str |> map (digitImage font scaleF)
+    let frms = stringToListOfCharStrings str
+               |> List.map (digitImage font scaleF)
         scaleF = textHeight / toFloat digitImageHeight
         distX = toFloat digitImageWidth * scaleF
     in  lineUp distX frms |> moveX (toFloat digitImageWidth * scaleF / 2)
 
-lineUp : Float -> [Form] -> Form
+lineUp : Float -> List Form -> Form
 lineUp distX forms =
-    let xs = [ 0 .. length forms ] |> map toFloat |> map (\x -> x * distX)
-    in zipWith (\frm x -> moveX x frm) forms xs |> group
+    let xs = [ 0 .. List.length forms ]
+             |> List.map toFloat
+             |> List.map (\x -> x * distX)
+    in List.map2 (\frm x -> moveX x frm) forms xs |> group
 
-stringToListOfCharStrings : String -> [String]
+stringToListOfCharStrings : String -> List String
 stringToListOfCharStrings =
-    String.toList >> map (\x -> String.cons x "")
+    String.toList >> List.map (\x -> String.cons x "")
 
 digitImage : String -> Float -> String -> Form
 digitImage font scaleFactor digit =
@@ -484,7 +512,7 @@ digitUrl font digit =
 
 displayBinary : Int -> Int -> Binary -> Form
 displayBinary xSizeFactor h bin =
-    let frms = map (showBinChar xSizeFactor h) <| String.toList bin
+    let frms = List.map (showBinChar xSizeFactor h) <| String.toList bin
         w = String.length bin
     in  lineUp (toFloat xSizeFactor) frms
 
