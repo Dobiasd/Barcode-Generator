@@ -77,7 +77,7 @@ scene winW baseContentSig addonContentSig
                 showGuardExtensionsCheck guardExtensions,
                 showAddonFullCheck addonFull,
                 showLightMarginIndicatorCheck lightMarginIndicator
-            ] |> container winW 250 midTop,
+            ] |> container winW 270 midTop,
             defSpacer,
             flow down [
                 defSpacer,
