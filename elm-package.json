@@ -1,0 +1,13 @@
+{
+    "version": "1.0.0",
+    "summary": "Generate barcodes in your browser with addon2/addon5 and real-time output.",
+    "repository": "https://github.com/Dobiasd/Barcode-Generator.git",
+    "license": "MIT",
+    "source-directories": [
+        "."
+    ],
+    "exposed-modules": [],
+    "dependencies": {
+        "elm-lang/core": "1.0.0 <= v < 2.0.0"
+    }
+}
