@@ -1,2 +1,7 @@
 build
 cache
+deploy.sh
+elm-stuff
+*.sublime-project
+*.sublime-workspace
+doc
