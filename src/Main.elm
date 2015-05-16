@@ -7,36 +7,36 @@ module BarcodeGenerator where
 
 import Debug
 import Dict
-import Maybe(withDefault, Maybe)
+import Maybe exposing (withDefault, Maybe)
 import Maybe
 import Regex
 import Result
 import String
 import Text
 import List
-import List((::))
-import Text(plainText)
+import List exposing ((::))
+import Text exposing (fromString)
 import Transform2D
-import Graphics.Input (dropDown, checkbox)
-import Graphics.Element (Element, spacer, flow, down, right, container, midTop
-  , color, middle, empty, image)
-import Graphics.Collage (rect, filled, move, moveX, moveY, group, toForm
-  , collage, Form)
-import Color (lightGrey, black, white)
+import Graphics.Input exposing (dropDown, checkbox)
+import Graphics.Element exposing (Element, spacer, flow, down, right
+    , container, midTop, color, middle, empty, image, leftAligned)
+import Graphics.Collage exposing (rect, filled, move, moveX, moveY, group
+    , toForm , collage, Form)
+import Color exposing (lightGrey, black, white)
 import Signal
-import Signal(Signal, (<~), (~))
+import Signal exposing (Signal, (<~), (~))
 import Graphics.Input.Field as Field
 import Window
 
 main : Signal Element
 main = scene <~ Window.width
-              ~ Signal.subscribe baseContent
-              ~ Signal.subscribe addonContent
-              ~ Signal.subscribe sizeContent
-              ~ Signal.subscribe fontContent
-              ~ Signal.subscribe guardExtensionsCheck
-              ~ Signal.subscribe addonFullCheck
-              ~ Signal.subscribe lightMarginIndicatorCheck
+              ~ baseContent.signal
+              ~ addonContent.signal
+              ~ sizeContent.signal
+              ~ fontContent.signal
+              ~ guardExtensionsCheck.signal
+              ~ addonFullCheck.signal
+              ~ lightMarginIndicatorCheck.signal
 
 scene : Int -> Field.Content -> Field.Content ->
         Int -> String -> Bool -> Bool -> Bool -> Element
@@ -51,27 +51,28 @@ scene winW baseContentSig addonContentSig
             defSpacer,
             Text.fromString "EAN/UPC-A Barcode Generator (+ addon2/addon5)"
                 |> Text.bold
-                |> Text.leftAligned
+                |> leftAligned
                 |> container winW 20 midTop,
             flow down [
                 defSpacer,
-                showEdit (Signal.send baseContent)
+                showEdit (Signal.message baseContent.address)
                     "base code: 11 or 12 digits"
                     baseContentSig,
-                showEdit (Signal.send addonContent)
+                showEdit (Signal.message addonContent.address)
                     "addon: 0, 2 or 5 digits"
                     addonContentSig,
-                plainText
-                  "(enter base code without check digit, i.e. the last printed digit)",
+                fromString
+                  "(enter base code without check digit, i.e. the last printed digit)"
+                      |> leftAligned,
                 defSpacer,
                 flow right [
-                    plainText "Size: ",
-                    dropDown (Signal.send sizeContent) sizeOptions
+                    fromString "Size: " |> leftAligned,
+                    dropDown (Signal.message sizeContent.address) sizeOptions
                 ],
                 defSpacer,
                 flow right [
-                    plainText "Font: ",
-                    dropDown (Signal.send fontContent) fontOptions
+                    fromString "Font: " |> leftAligned,
+                    dropDown (Signal.message fontContent.address) fontOptions
                 ],
                 defSpacer,
                 showGuardExtensionsCheck guardExtensions,
@@ -91,50 +92,53 @@ scene winW baseContentSig addonContentSig
 showGuardExtensionsCheck : Bool -> Element
 showGuardExtensionsCheck guardExtensions =
     flow right [
-        checkbox (Signal.send guardExtensionsCheck) guardExtensions
+        checkbox (Signal.message guardExtensionsCheck.address) guardExtensions
             |> container 30 30 middle,
-        plainText "guard extensions"
+        fromString "guard extensions"
+            |> leftAligned
             |> container 153 30 middle
     ]
 
 showAddonFullCheck : Bool -> Element
 showAddonFullCheck addonFull = flow right [
-        checkbox (Signal.send addonFullCheck) addonFull
+        checkbox (Signal.message addonFullCheck.address) addonFull
             |> container 30 30 middle,
-        plainText "full height addon"
+        fromString "full height addon"
+            |> leftAligned
             |> container 150 30 middle
     ]
 
 showLightMarginIndicatorCheck : Bool -> Element
 showLightMarginIndicatorCheck lightMarginIndicator = flow right [
-        checkbox (Signal.send lightMarginIndicatorCheck) lightMarginIndicator
+        checkbox (Signal.message lightMarginIndicatorCheck.address) lightMarginIndicator
             |> container 30 30 middle,
-        plainText "light margin indicator"
+        fromString "light margin indicator"
+            |> leftAligned
             |> container 180 30 middle
     ]
 
 
 
-baseContent : Signal.Channel Field.Content
-baseContent = Signal.channel Field.noContent
+baseContent : Signal.Mailbox Field.Content
+baseContent = Signal.mailbox Field.noContent
 
-addonContent : Signal.Channel Field.Content
-addonContent = Signal.channel Field.noContent
+addonContent : Signal.Mailbox Field.Content
+addonContent = Signal.mailbox Field.noContent
 
-sizeContent : Signal.Channel (Int)
-sizeContent = Signal.channel 4
+sizeContent : Signal.Mailbox (Int)
+sizeContent = Signal.mailbox 4
 
-fontContent : Signal.Channel (String)
-fontContent = Signal.channel "OCR-B"
+fontContent : Signal.Mailbox (String)
+fontContent = Signal.mailbox "OCR-B"
 
-guardExtensionsCheck : Signal.Channel Bool
-guardExtensionsCheck = Signal.channel True
+guardExtensionsCheck : Signal.Mailbox Bool
+guardExtensionsCheck = Signal.mailbox True
 
-addonFullCheck : Signal.Channel Bool
-addonFullCheck = Signal.channel True
+addonFullCheck : Signal.Mailbox Bool
+addonFullCheck = Signal.mailbox True
 
-lightMarginIndicatorCheck : Signal.Channel Bool
-lightMarginIndicatorCheck = Signal.channel True
+lightMarginIndicatorCheck : Signal.Mailbox Bool
+lightMarginIndicatorCheck = Signal.mailbox True
 
 sizeOptions : List (String, Int)
 sizeOptions =
@@ -281,8 +285,13 @@ fromMaybe def m = case m of
     Maybe.Just x -> x
     Maybe.Nothing -> def
 
+unsafeHead : List a -> a
+unsafeHead xs = case xs of
+  (x::_) -> x
+  _ -> Debug.crash "unsafeHead with empty list"
+
 last : List a -> a
-last = List.reverse >> List.head
+last = List.reverse >> unsafeHead
 
 {-| http://en.wikipedia.org/wiki/EAN_2 -}
 generateAddon2 : String -> Binary
@@ -294,7 +303,7 @@ generateAddon2 str =
         parities = addon2Parities value
         digitsToBins = List.map (flip getOrFail parityToDigitsToBin) parities
         binaries = List.map2 getOrFail chars digitsToBins
-        front = List.head binaries
+        front = unsafeHead binaries
         back = last binaries
     in  startGuard ++ front ++ middleGuard ++ back
 
