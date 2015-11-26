@@ -24,19 +24,23 @@ import Graphics.Collage exposing (rect, filled, move, moveX, moveY, group
     , toForm , collage, Form)
 import Color exposing (lightGrey, black, white)
 import Signal
-import Signal exposing (Signal, (<~), (~))
+import Signal exposing (Signal)
 import Graphics.Input.Field as Field
 import Window
 
+andMap : Signal (a -> b) -> Signal a -> Signal b
+andMap =
+  Signal.map2 (<|)
+
 main : Signal Element
-main = scene <~ Window.width
-              ~ baseContent.signal
-              ~ addonContent.signal
-              ~ sizeContent.signal
-              ~ fontContent.signal
-              ~ guardExtensionsCheck.signal
-              ~ addonFullCheck.signal
-              ~ lightMarginIndicatorCheck.signal
+main = Signal.map scene Window.width
+              `andMap` baseContent.signal
+              `andMap` addonContent.signal
+              `andMap` sizeContent.signal
+              `andMap` fontContent.signal
+              `andMap` guardExtensionsCheck.signal
+              `andMap` addonFullCheck.signal
+              `andMap` lightMarginIndicatorCheck.signal
 
 scene : Int -> Field.Content -> Field.Content ->
         Int -> String -> Bool -> Bool -> Bool -> Element
@@ -241,6 +245,7 @@ getOrFail : comparable -> Dict.Dict comparable v -> v
 getOrFail key dict =
   case Dict.get key dict of
     Maybe.Just res -> res
+    _ -> Debug.crash "getOrFail failed"
 
 generateEAN13Front : String -> Binary
 generateEAN13Front str =
@@ -276,9 +281,9 @@ stringToDigitValues = String.toList >>
 
 generateAddon : String -> Binary
 generateAddon str = case String.length str of
-    0 -> ""
     2 -> generateAddon2 str
     5 -> generateAddon5 str
+    otherwise -> ""
 
 fromMaybe : a -> Maybe a -> a
 fromMaybe def m = case m of
@@ -313,6 +318,7 @@ addon2Parities checksum = case checksum `rem` 4 of
     1 -> ['L', 'G']
     2 -> ['G', 'L']
     3 -> ['G', 'G']
+    _ -> Debug.crash "addon2Parities failed"
 
 {-| http://en.wikipedia.org/wiki/EAN_2 -}
 generateAddon5 : String -> Binary
@@ -338,6 +344,7 @@ addon5Parities checksum = case checksum `rem` 10 of
     7 -> ['L', 'G', 'L', 'G', 'L']
     8 -> ['L', 'G', 'L', 'L', 'G']
     9 -> ['L', 'L', 'G', 'L', 'G']
+    _ -> Debug.crash "addon5Parities failed"
 
 calcCheckSum : (Int, Int) -> List Int -> Int
 calcCheckSum (m1, m2) xs =
