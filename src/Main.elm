@@ -7,6 +7,9 @@ module BarcodeGenerator where
 
 import Debug
 import Dict
+import Html
+import Html.Attributes
+import Html.Events
 import Maybe exposing (withDefault, Maybe)
 import Maybe
 import Regex
@@ -22,15 +25,26 @@ import Graphics.Element exposing (Element, spacer, flow, down, right
     , container, midTop, color, middle, empty, image, leftAligned)
 import Graphics.Collage exposing (rect, filled, move, moveX, moveY, group
     , toForm , collage, Form)
-import Color exposing (lightGrey, black, white)
+import Color exposing (black, white)
 import Signal
 import Signal exposing (Signal)
 import Graphics.Input.Field as Field
 import Window
 
+port saveImagePort : Signal String
+port saveImagePort = saveImage.signal
+
+saveImage : Signal.Mailbox String
+saveImage = Signal.mailbox ""
+
 andMap : Signal (a -> b) -> Signal a -> Signal b
 andMap =
   Signal.map2 (<|)
+
+barcodeToString : String -> String -> String
+barcodeToString base addon =
+    if String.isEmpty(addon) then base
+    else base ++ "_" ++ addon
 
 main : Signal Element
 main = Signal.map scene Window.width
@@ -49,8 +63,13 @@ scene winW baseContentSig addonContentSig
     let w = 600
         base = baseContentSig.string
         addon = addonContentSig.string
-        defSpacer = spacer w 20
+        defSpacerHeight = 20
+        defSpacer = spacer w defSpacerHeight
         showEdit h = Field.field Field.defaultStyle h
+        barcodeElem = displayBarcode sizeFactor guardExtensions addonFull
+                                   lightMarginIndicator font base addon
+        barcodeElemWidth = Graphics.Element.widthOf barcodeElem
+        barcodeElemHeight = Graphics.Element.heightOf barcodeElem
     in  flow down [
             defSpacer,
             Text.fromString "EAN/UPC-A Barcode Generator (+ addon2/addon5)"
@@ -84,13 +103,22 @@ scene winW baseContentSig addonContentSig
                 showLightMarginIndicatorCheck lightMarginIndicator
             ] |> container winW 270 midTop,
             defSpacer,
-            flow down [
-                defSpacer,
-                flow right [
-                    displayBarcode sizeFactor guardExtensions addonFull
-                                       lightMarginIndicator font base addon
+            flow right [
+                spacer ((winW - barcodeElemWidth) // 2) barcodeElemHeight,
+                flow down [
+                        Html.div
+                            [Html.Attributes.id "barcodeDiv"]
+                            [Html.fromElement barcodeElem]
+                        |> Html.toElement barcodeElemWidth barcodeElemHeight,
+                    if barcodeElemHeight < 1 then empty
+                    else
+                        Html.button
+                            [Html.Events.onClick
+                                saveImage.address (barcodeToString base addon)]
+                            [Html.text "download generated barcode image"]
+                        |> Html.toElement 300 30
                 ]
-            ] |> container winW 650 midTop |> color lightGrey
+            ]
         ]
 
 showGuardExtensionsCheck : Bool -> Element
