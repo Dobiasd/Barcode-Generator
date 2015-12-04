@@ -1,8 +1,3 @@
--- todo = [ split into modules,
---          docstrings,
---          type safety,
---          single canvas for saving: https://groups.google.com/forum/?fromgroups#!topic/elm-discuss/U7KTUBSY904 ]
-
 module BarcodeGenerator where
 
 import Debug
@@ -110,6 +105,7 @@ scene winW baseContentSig addonContentSig
                             [Html.Attributes.id "barcodeDiv"]
                             [Html.fromElement barcodeElem]
                         |> Html.toElement barcodeElemWidth barcodeElemHeight,
+                    defSpacer,
                     if barcodeElemHeight < 1 then empty
                     else
                         Html.button
