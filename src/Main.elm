@@ -115,8 +115,8 @@ scene winW baseContentSig addonContentSig
                         Html.button
                             [Html.Events.onClick
                                 saveImage.address (barcodeToString base addon)]
-                            [Html.text "download generated barcode image"]
-                        |> Html.toElement 300 30
+                            [Html.text "download generated barcode image (beta)"]
+                        |> Html.toElement 340 30
                 ]
             ]
         ]
