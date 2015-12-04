@@ -11,6 +11,7 @@ if [ $? -eq 0 ]
 then
   cp -r src/fonts build
   cp ./src/index.html ./build/index.html
+  cp ./src/style.css ./build/style.css
   cp ./src/htmlmain.js ./build/js/htmlmain.js
   cp ./src/html2canvas.js ./build/js/html2canvas.js
 fi

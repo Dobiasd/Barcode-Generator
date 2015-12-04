@@ -481,7 +481,9 @@ displayBarcode xSizeFactor guardExtensions addonFull lightMarginIndicators
                         |> showText font textHeight
 
         border = 2 * xSizeFactor
-        collageW = addonX2 + border + 13 * xSizeFactor |> ceiling
+        collageW = if addonW > 0
+            then addonX2 + border + 13 * xSizeFactor |> ceiling
+            else baseX2 + border + 13 * xSizeFactor |> ceiling
         collageH = baseY2 + border |> ceiling
 
         baseTextLeftOffsetX = if String.length strBaseLeft == 5
