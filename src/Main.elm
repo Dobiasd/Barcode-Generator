@@ -127,7 +127,7 @@ checkbox tagger isChecked label =
 
 radio : String -> Msg -> Bool -> String -> Html Msg
 radio groupName msg isSelected label =
-    div [ style [ ( "display", "inline" ) ] ]
+    div [ style [ ( "display", "inline"), ("margin-left", "20px" ) ] ]
         [ input [ name groupName, type' "radio", checked isSelected, onCheck (always msg) ] []
         , text label
         ]
