@@ -1,43 +1,107 @@
-module BarcodeGenerator (..) where
+port module BarcodeGenerator exposing (..)
 
 import Debug
 import Dict
-import Html
-import Html.Attributes
-import Html.Events
+import Html exposing (Html, Attribute, div, text, input)
+import Html.App exposing (program)
+import Html.Attributes exposing (..)
+import Html.Events exposing (onInput, onCheck)
 import Maybe exposing (withDefault, Maybe)
 import Maybe
 import Regex
 import Result
 import String
+import Task
 import Text
 import List
 import List exposing ((::))
 import Text exposing (fromString)
-import Transform2D
-import Graphics.Input exposing (dropDown, checkbox)
-import Graphics.Element exposing (Element, spacer, flow, down, right, container, midTop, color, middle, empty, image, leftAligned)
-import Graphics.Collage exposing (rect, filled, move, moveX, moveY, group, toForm, collage, Form)
+import Element exposing (Element, flow, down, right, container, midTop, color, middle, empty, image, leftAligned)
+import Collage exposing (rect, filled, move, moveX, moveY, group, toForm, collage, Form)
 import Color exposing (black, white)
-import Signal
-import Signal exposing (Signal)
-import Graphics.Input.Field as Field
-import Window
 
 
-port saveImagePort : Signal String
-port saveImagePort =
-    saveImage.signal
+port saveImagePort : String -> Cmd msg
 
 
-saveImage : Signal.Mailbox String
-saveImage =
-    Signal.mailbox ""
+main =
+    program
+        { init = initModelAndCommands
+        , update = update
+        , subscriptions = always Sub.none
+        , view = view
+        }
 
 
-andMap : Signal (a -> b) -> Signal a -> Signal b
-andMap =
-    Signal.map2 (<|)
+type Msg
+    = NoOp
+    | Base String
+    | Addon String
+    | SizeChange String
+    | FontChange String
+    | GuardExtensions Bool
+    | AddonFull Bool
+    | LightMarginIndicator Bool
+    | SaveImage String
+
+
+type alias Model =
+    { base : String
+    , addon : String
+    , size : String
+    , font : String
+    , guardExtensions : Bool
+    , addonFull : Bool
+    , lightMarginIndicator : Bool
+    }
+
+
+defaultModel : Model
+defaultModel =
+    { base = ""
+    , addon = ""
+    , size = "normal"
+    , font = "OCR-B"
+    , guardExtensions = True
+    , addonFull = True
+    , lightMarginIndicator = True
+    }
+
+
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model =
+    case msg of
+        Base str ->
+            ( { model | base = str }, Cmd.none )
+
+        Addon str ->
+            ( { model | addon = str }, Cmd.none )
+
+        SizeChange str ->
+            ( { model | size = str }, Cmd.none )
+
+        FontChange str ->
+            ( { model | font = str }, Cmd.none )
+
+        GuardExtensions b ->
+            ( { model | guardExtensions = b }, Cmd.none )
+
+        AddonFull b ->
+            ( { model | addonFull = b }, Cmd.none )
+
+        LightMarginIndicator b ->
+            ( { model | lightMarginIndicator = b }, Cmd.none )
+
+        SaveImage str ->
+            ( model, saveImagePort str )
+
+        _ ->
+            ( model, Cmd.none )
+
+
+initModelAndCommands : ( Model, Cmd Msg )
+initModelAndCommands =
+    ( defaultModel, Cmd.none )
 
 
 barcodeToString : String -> String -> String
@@ -48,36 +112,41 @@ barcodeToString base addon =
         base ++ "_" ++ addon
 
 
-main : Signal Element
-main =
-    Signal.map scene Window.width
-        `andMap` baseContent.signal
-        `andMap` addonContent.signal
-        `andMap` sizeContent.signal
-        `andMap` fontContent.signal
-        `andMap` guardExtensionsCheck.signal
-        `andMap` addonFullCheck.signal
-        `andMap` lightMarginIndicatorCheck.signal
+divWidth : Int -> Attribute Msg
+divWidth w =
+    style [ ( "width", toString w ++ "px" ) ]
 
 
-scene : Int -> Field.Content -> Field.Content -> Int -> String -> Bool -> Bool -> Bool -> Element
-scene winW baseContentSig addonContentSig sizeFactor font guardExtensions addonFull lightMarginIndicator =
+checkbox : (Bool -> Msg) -> Bool -> String -> Html Msg
+checkbox tagger isChecked label =
+    div []
+        [ input [ type' "checkbox", checked isChecked, onCheck tagger ] []
+        , text label
+        ]
+
+
+radio : String -> Msg -> Bool -> String -> Html Msg
+radio groupName msg isSelected label =
+    div [ style [ ( "display", "inline" ) ] ]
+        [ input [ name groupName, type' "radio", checked isSelected, onCheck (always msg) ] []
+        , text label
+        ]
+
+
+radios : String -> List ( String, Msg ) -> String -> Html Msg
+radios groupName namesAndMsgs selectedName =
+    List.map (\( name, msg ) -> radio groupName msg (name == selectedName) name) namesAndMsgs
+        |> div []
+
+
+view : Model -> Html Msg
+view { base, addon, size, font, guardExtensions, addonFull, lightMarginIndicator } =
     let
-        w = 600
-
-        base = baseContentSig.string
-
-        addon = addonContentSig.string
-
-        defSpacerHeight = 20
-
-        defSpacer = spacer w defSpacerHeight
-
-        showEdit h = Field.field Field.defaultStyle h
+        showEdit h p =
+            input [ style [ ( "margin", "10px" ) ], onInput h, placeholder p, divWidth 200 ] []
 
         barcodeElem =
-            displayBarcode
-                sizeFactor
+            displayBarcode (sizeFromStr size)
                 guardExtensions
                 addonFull
                 lightMarginIndicator
@@ -85,159 +154,88 @@ scene winW baseContentSig addonContentSig sizeFactor font guardExtensions addonF
                 base
                 addon
 
-        barcodeElemWidth = Graphics.Element.widthOf barcodeElem
+        barcodeElemWidth =
+            Element.widthOf barcodeElem
 
-        barcodeElemHeight = Graphics.Element.heightOf barcodeElem
+        barcodeElemHeight =
+            Element.heightOf barcodeElem
+
+        downloadButtonWidth =
+            300
     in
-        flow
-            down
-            [ defSpacer
-            , Text.fromString "EAN/UPC-A Barcode Generator (+ addon2/addon5)"
-                |> Text.bold
-                |> leftAligned
-                |> container winW 20 midTop
-            , flow
-                down
-                [ defSpacer
-                , showEdit
-                    (Signal.message baseContent.address)
-                    "base code: 11 or 12 digits"
-                    baseContentSig
-                , showEdit
-                    (Signal.message addonContent.address)
-                    "addon: 0, 2 or 5 digits"
-                    addonContentSig
-                , fromString
-                    "(enter base code without check digit, i.e. the last printed digit)"
+        div []
+            [ div [ style [ ( "margin", "0 auto" ) ], divWidth 600 ]
+                [ Text.fromString "EAN/UPC-A Barcode Generator (+ addon2/addon5)"
+                    |> Text.bold
                     |> leftAligned
-                , defSpacer
-                , flow
-                    right
-                    [ fromString "Size: " |> leftAligned
-                    , dropDown (Signal.message sizeContent.address) sizeOptions
+                    |> Element.toHtml
+                , div []
+                    [ showEdit Base
+                        "base code: 11 or 12 digits"
+                    , showEdit Addon
+                        "addon: 0, 2 or 5 digits"
+                    , fromString "(enter base code without check digit, i.e. the last printed digit)"
+                        |> leftAligned
+                        |> Element.toHtml
+                    , div [ style [ ( "margin", "10px" ) ] ]
+                        [ text "Size: "
+                        , radios "sizebuttons" sizeOptions size
+                        ]
+                    , div [ style [ ( "margin", "10px" ) ] ]
+                        [ text "Font: "
+                        , radios "fontbuttons" fontOptions font
+                        ]
+                    , div [ style [ ( "margin", "10px" ) ] ]
+                        [ checkbox GuardExtensions guardExtensions "guard extensions"
+                        , checkbox AddonFull addonFull "full height addon"
+                        , checkbox LightMarginIndicator lightMarginIndicator "light margin indicator"
+                        ]
                     ]
-                , defSpacer
-                , flow
-                    right
-                    [ fromString "Font: " |> leftAligned
-                    , dropDown (Signal.message fontContent.address) fontOptions
-                    ]
-                , defSpacer
-                , showGuardExtensionsCheck guardExtensions
-                , showAddonFullCheck addonFull
-                , showLightMarginIndicatorCheck lightMarginIndicator
                 ]
-                |> container winW 270 midTop
-            , defSpacer
-            , flow
-                right
-                [ spacer ((winW - barcodeElemWidth) // 2) barcodeElemHeight
-                , flow
-                    down
-                    [ Html.div
-                        [ Html.Attributes.id "barcodeDiv" ]
-                        [ Html.fromElement barcodeElem ]
-                        |> Html.toElement barcodeElemWidth barcodeElemHeight
-                    , defSpacer
-                    , if barcodeElemHeight < 1 then
-                        empty
-                      else
-                        Html.button
-                            [ Html.Events.onClick
-                                saveImage.address
-                                (barcodeToString base addon)
-                            ]
-                            [ Html.text "download generated barcode image (beta)" ]
-                            |> Html.toElement 340 30
-                    ]
+            , div [ style [ ( "margin", "0 auto" ) ], divWidth barcodeElemWidth ]
+                [ Element.toHtml barcodeElem ]
+            , div [ style [ ( "margin", "0 auto" ) ], divWidth downloadButtonWidth ]
+                [ if barcodeElemHeight < 1 then
+                    empty |> Element.toHtml
+                  else
+                    Html.button [ style [ ( "margin", "10px" ) ], divWidth downloadButtonWidth, Html.Events.onClick (SaveImage (barcodeToString base addon)) ]
+                        [ Html.text "download generated barcode image (beta)" ]
                 ]
             ]
 
 
-showGuardExtensionsCheck : Bool -> Element
-showGuardExtensionsCheck guardExtensions =
-    flow
-        right
-        [ checkbox (Signal.message guardExtensionsCheck.address) guardExtensions
-            |> container 30 30 middle
-        , fromString "guard extensions"
-            |> leftAligned
-            |> container 153 30 middle
-        ]
-
-
-showAddonFullCheck : Bool -> Element
-showAddonFullCheck addonFull =
-    flow
-        right
-        [ checkbox (Signal.message addonFullCheck.address) addonFull
-            |> container 30 30 middle
-        , fromString "full height addon"
-            |> leftAligned
-            |> container 150 30 middle
-        ]
-
-
-showLightMarginIndicatorCheck : Bool -> Element
-showLightMarginIndicatorCheck lightMarginIndicator =
-    flow
-        right
-        [ checkbox (Signal.message lightMarginIndicatorCheck.address) lightMarginIndicator
-            |> container 30 30 middle
-        , fromString "light margin indicator"
-            |> leftAligned
-            |> container 180 30 middle
-        ]
-
-
-baseContent : Signal.Mailbox Field.Content
-baseContent =
-    Signal.mailbox Field.noContent
-
-
-addonContent : Signal.Mailbox Field.Content
-addonContent =
-    Signal.mailbox Field.noContent
-
-
-sizeContent : Signal.Mailbox Int
-sizeContent =
-    Signal.mailbox 4
-
-
-fontContent : Signal.Mailbox String
-fontContent =
-    Signal.mailbox "OCR-B"
-
-
-guardExtensionsCheck : Signal.Mailbox Bool
-guardExtensionsCheck =
-    Signal.mailbox True
-
-
-addonFullCheck : Signal.Mailbox Bool
-addonFullCheck =
-    Signal.mailbox True
-
-
-lightMarginIndicatorCheck : Signal.Mailbox Bool
-lightMarginIndicatorCheck =
-    Signal.mailbox True
-
-
-sizeOptions : List ( String, Int )
+sizeOptions : List ( String, Msg )
 sizeOptions =
-    [ ( "normal", 4 )
-    , ( "smallest", 1 )
-    , ( "small", 2 )
-    , ( "large", 8 )
+    [ ( "smallest", SizeChange "smallest" )
+    , ( "small", SizeChange "small" )
+    , ( "normal", SizeChange "normal" )
+    , ( "large", SizeChange "large" )
     ]
 
 
-fontOptions : List ( String, String )
+sizeFromStr : String -> Int
+sizeFromStr str =
+    case str of
+        "normal" ->
+            4
+
+        "smallest" ->
+            1
+
+        "small" ->
+            2
+
+        "large" ->
+            8
+
+        _ ->
+            sizeFromStr "normal"
+
+
+fontOptions : List ( String, Msg )
 fontOptions =
-    [ ( "OCR-B", "OCR-B" )
-    , ( "OCR-A", "OCR-A" )
+    [ ( "OCR-A", FontChange "OCR-A" )
+    , ( "OCR-B", FontChange "OCR-B" )
     ]
 
 
@@ -323,9 +321,11 @@ invertBinaryChar c =
 baseInputToBarcodeString : Bool -> String -> String
 baseInputToBarcodeString leadingZeroIfNeeded base =
     let
-        base' = String.padLeft 12 '0' base
+        base' =
+            String.padLeft 12 '0' base
 
-        checkDigit = calcCheckDigit base'
+        checkDigit =
+            calcCheckDigit base'
 
         baseOut =
             (if leadingZeroIfNeeded then
@@ -356,7 +356,8 @@ addonOK addon =
 generateBarcode : String -> String -> ( Binary, Binary )
 generateBarcode base addon =
     let
-        base' = baseInputToBarcodeString True base
+        base' =
+            baseInputToBarcodeString True base
     in
         ( if baseOK base then
             generateEAN13 base'
@@ -375,15 +376,20 @@ generateBarcode base addon =
 generateEAN13 : String -> Binary
 generateEAN13 str =
     let
-        startGuard = "101"
+        startGuard =
+            "101"
 
-        middleGuard = "01010"
+        middleGuard =
+            "01010"
 
-        endGuard = "101"
+        endGuard =
+            "101"
 
-        front = String.left 7 str |> generateEAN13Front
+        front =
+            String.left 7 str |> generateEAN13Front
 
-        back = String.right 6 str |> generateEAN13Back
+        back =
+            String.right 6 str |> generateEAN13Back
     in
         startGuard ++ front ++ middleGuard ++ back ++ endGuard
 
@@ -409,13 +415,17 @@ generateEAN13Front str =
                 Maybe.Nothing ->
                     ( '0', "" )
 
-        parities = getOrFail first firstDigitToParities
+        parities =
+            getOrFail first firstDigitToParities
 
-        charDicts = List.map (flip getOrFail parityToDigitsToBin) parities
+        charDicts =
+            List.map (flip getOrFail parityToDigitsToBin) parities
 
-        chars = String.toList rest
+        chars =
+            String.toList rest
 
-        binaries = List.map2 getOrFail chars charDicts
+        binaries =
+            List.map2 getOrFail chars charDicts
     in
         String.concat binaries
 
@@ -423,9 +433,11 @@ generateEAN13Front str =
 generateEAN13Back : String -> Binary
 generateEAN13Back str =
     let
-        chars = String.toList str
+        chars =
+            String.toList str
 
-        binaries = List.map2 getOrFail chars <| List.repeat 6 upcDigitsToBinR
+        binaries =
+            List.map2 getOrFail chars <| List.repeat 6 upcDigitsToBinR
     in
         String.concat binaries
 
@@ -435,9 +447,11 @@ generateEAN13Back str =
 calcCheckDigit : String -> String
 calcCheckDigit str =
     let
-        vals = str |> String.reverse |> stringToDigitValues
+        vals =
+            str |> String.reverse |> stringToDigitValues
 
-        s = calcCheckSum ( 3, 1 ) vals
+        s =
+            calcCheckSum ( 3, 1 ) vals
     in
         if List.length vals == 12 then
             10 - s `rem` 10 |> \x -> x `rem` 10 |> toString
@@ -498,23 +512,32 @@ last =
 generateAddon2 : String -> Binary
 generateAddon2 str =
     let
-        value = String.toInt str |> Result.toMaybe |> fromMaybe 0
+        value =
+            String.toInt str |> Result.toMaybe |> fromMaybe 0
 
-        chars = String.toList str
+        chars =
+            String.toList str
 
-        startGuard = "01011"
+        startGuard =
+            "01011"
 
-        middleGuard = "01"
+        middleGuard =
+            "01"
 
-        parities = addon2Parities value
+        parities =
+            addon2Parities value
 
-        digitsToBins = List.map (flip getOrFail parityToDigitsToBin) parities
+        digitsToBins =
+            List.map (flip getOrFail parityToDigitsToBin) parities
 
-        binaries = List.map2 getOrFail chars digitsToBins
+        binaries =
+            List.map2 getOrFail chars digitsToBins
 
-        front = unsafeHead binaries
+        front =
+            unsafeHead binaries
 
-        back = last binaries
+        back =
+            last binaries
     in
         startGuard ++ front ++ middleGuard ++ back
 
@@ -543,19 +566,26 @@ addon2Parities checksum =
 generateAddon5 : String -> Binary
 generateAddon5 str =
     let
-        startGuard = "01011"
+        startGuard =
+            "01011"
 
-        separator = "01"
+        separator =
+            "01"
 
-        digitValues = stringToDigitValues str
+        digitValues =
+            stringToDigitValues str
 
-        parities = addon5Parities <| calcCheckSum ( 3, 9 ) digitValues
+        parities =
+            addon5Parities <| calcCheckSum ( 3, 9 ) digitValues
 
-        charDicts = List.map (flip getOrFail parityToDigitsToBin) parities
+        charDicts =
+            List.map (flip getOrFail parityToDigitsToBin) parities
 
-        chars = String.toList str
+        chars =
+            String.toList str
 
-        binaries = List.map2 getOrFail chars charDicts
+        binaries =
+            List.map2 getOrFail chars charDicts
     in
         startGuard ++ (List.intersperse separator binaries |> String.concat)
 
@@ -606,7 +636,8 @@ calcCheckSum ( m1, m2 ) xs =
             else
                 xs ++ [ 0 ]
 
-        f ( a, b ) = m1 * a + m2 * b
+        f ( a, b ) =
+            m1 * a + m2 * b
     in
         xs' |> nonOverlappingPairs |> List.map f |> List.sum
 
@@ -626,15 +657,20 @@ nonOverlappingPairs l =
 displayBarcode : Int -> Bool -> Bool -> Bool -> String -> String -> String -> Element
 displayBarcode xSizeFactor guardExtensions addonFull lightMarginIndicators font baseStr addonStr =
     let
-        ( baseBin, addonBin ) = generateBarcode baseStr addonStr
+        ( baseBin, addonBin ) =
+            generateBarcode baseStr addonStr
 
-        base = displayBinary xSizeFactor baseH baseBin
+        base =
+            displayBinary xSizeFactor baseH baseBin
 
-        addon = displayBinary xSizeFactor addonH addonBin
+        addon =
+            displayBinary xSizeFactor addonH addonBin
 
-        textBaseDistY = 3 * xSizeFactor
+        textBaseDistY =
+            3 * xSizeFactor
 
-        addonDistX = 14 * xSizeFactor
+        addonDistX =
+            14 * xSizeFactor
 
         addonTextDistX =
             if String.length addonStr == 2 then
@@ -642,65 +678,94 @@ displayBarcode xSizeFactor guardExtensions addonFull lightMarginIndicators font 
             else
                 19 * xSizeFactor
 
-        textHeight = 7 * xSizeFactor
+        textHeight =
+            7 * xSizeFactor
 
-        baseX1 = 10 * xSizeFactor
+        baseX1 =
+            10 * xSizeFactor
 
-        baseY1 = textHeight + textBaseDistY
+        baseY1 =
+            textHeight + textBaseDistY
 
-        baseW = String.length baseBin * xSizeFactor |> toFloat
+        baseW =
+            String.length baseBin * xSizeFactor |> toFloat
 
-        baseX2 = baseX1 + baseW
+        baseX2 =
+            baseX1 + baseW
 
-        baseH = 66 * xSizeFactor
+        baseH =
+            66 * xSizeFactor
 
-        baseY2 = baseY1 + baseH
+        baseY2 =
+            baseY1 + baseH
 
-        guard1X1 = baseX1
+        guard1X1 =
+            baseX1
 
-        guard1Y1 = textHeight / 2
+        guard1Y1 =
+            textHeight / 2
 
-        guard1Y2 = baseY1
+        guard1Y2 =
+            baseY1
 
-        guardH = guard1Y2 - guard1Y1
+        guardH =
+            guard1Y2 - guard1Y1
 
-        textBaseY1 = 0 * xSizeFactor
+        textBaseY1 =
+            0 * xSizeFactor
 
-        textBaseY2 = textHeight
+        textBaseY2 =
+            textHeight
 
-        textBaseYC = (textBaseY2 - textBaseY1) / 2
+        textBaseYC =
+            (textBaseY2 - textBaseY1) / 2
 
-        textBaseLeftSingleX1 = 0 * xSizeFactor
+        textBaseLeftSingleX1 =
+            0 * xSizeFactor
 
-        textBaseRightSingleX1 = baseX2 + 3 * xSizeFactor
+        textBaseRightSingleX1 =
+            baseX2 + 3 * xSizeFactor
 
-        textBaseLeftX1 = guard2X2 + 3 * xSizeFactor
+        textBaseLeftX1 =
+            guard2X2 + 3 * xSizeFactor
 
         --textBaseLeftX2 = guard3X1 - 3
-        textBaseRightX1 = guard4X2 + 3 * xSizeFactor
+        textBaseRightX1 =
+            guard4X2 + 3 * xSizeFactor
 
         --textBaseRightX2 = guard5X1 - 3
-        guard2X1 = guard1X1 + 2 * xSizeFactor
+        guard2X1 =
+            guard1X1 + 2 * xSizeFactor
 
-        guard3X1 = guard1X1 + 46 * xSizeFactor
+        guard3X1 =
+            guard1X1 + 46 * xSizeFactor
 
-        guard4X1 = guard3X1 + 2 * xSizeFactor
+        guard4X1 =
+            guard3X1 + 2 * xSizeFactor
 
-        guard5X1 = guard3X1 + 46 * xSizeFactor
+        guard5X1 =
+            guard3X1 + 46 * xSizeFactor
 
-        guard6X1 = guard5X1 + 2 * xSizeFactor
+        guard6X1 =
+            guard5X1 + 2 * xSizeFactor
 
-        guard1X2 = guard1X1 + 1 * xSizeFactor
+        guard1X2 =
+            guard1X1 + 1 * xSizeFactor
 
-        guard2X2 = guard2X1 + 1 * xSizeFactor
+        guard2X2 =
+            guard2X1 + 1 * xSizeFactor
 
-        guard3X2 = guard3X1 + 1 * xSizeFactor
+        guard3X2 =
+            guard3X1 + 1 * xSizeFactor
 
-        guard4X2 = guard4X1 + 1 * xSizeFactor
+        guard4X2 =
+            guard4X1 + 1 * xSizeFactor
 
-        guard5X2 = guard5X1 + 1 * xSizeFactor
+        guard5X2 =
+            guard5X1 + 1 * xSizeFactor
 
-        guard6X2 = guard6X1 + 1 * xSizeFactor
+        guard6X2 =
+            guard6X1 + 1 * xSizeFactor
 
         guard =
             rect xSizeFactor guardH
@@ -708,27 +773,38 @@ displayBarcode xSizeFactor guardExtensions addonFull lightMarginIndicators font 
                 |> move ( 0.5 * xSizeFactor, guardH / 2 |> ceiling |> toFloat )
                 |> moveY guard1Y1
 
-        guard1 = guard |> moveX guard1X1
+        guard1 =
+            guard |> moveX guard1X1
 
-        guard2 = guard |> moveX guard2X1
+        guard2 =
+            guard |> moveX guard2X1
 
-        guard3 = guard |> moveX guard3X1
+        guard3 =
+            guard |> moveX guard3X1
 
-        guard4 = guard |> moveX guard4X1
+        guard4 =
+            guard |> moveX guard4X1
 
-        guard5 = guard |> moveX guard5X1
+        guard5 =
+            guard |> moveX guard5X1
 
-        guard6 = guard |> moveX guard6X1
+        guard6 =
+            guard |> moveX guard6X1
 
-        guards = group [ guard1, guard2, guard3, guard4, guard5, guard6 ]
+        guards =
+            group [ guard1, guard2, guard3, guard4, guard5, guard6 ]
 
-        addonX1 = baseX2 + addonDistX
+        addonX1 =
+            baseX2 + addonDistX
 
-        addonY1 = baseY1
+        addonY1 =
+            baseY1
 
-        addonW = String.length addonBin * xSizeFactor |> toFloat
+        addonW =
+            String.length addonBin * xSizeFactor |> toFloat
 
-        addonX2 = addonX1 + addonW
+        addonX2 =
+            addonX1 + addonW
 
         addonY2 =
             if addonFull then
@@ -736,9 +812,11 @@ displayBarcode xSizeFactor guardExtensions addonFull lightMarginIndicators font 
             else
                 baseY2 - (1 * xSizeFactor + textHeight + 3 * xSizeFactor)
 
-        addonH = addonY2 - addonY1
+        addonH =
+            addonY2 - addonY1
 
-        textAddonX1 = addonX1 + addonTextDistX
+        textAddonX1 =
+            addonX1 + addonTextDistX
 
         textAddonY1 =
             if addonFull then
@@ -746,9 +824,11 @@ displayBarcode xSizeFactor guardExtensions addonFull lightMarginIndicators font 
             else
                 addonY2 + 3 * xSizeFactor
 
-        textAddonX2 = addonX2 - 1 * xSizeFactor
+        textAddonX2 =
+            addonX2 - 1 * xSizeFactor
 
-        textAddonYC = textAddonY1 + textHeight / 2
+        textAddonYC =
+            textAddonY1 + textHeight / 2
 
         addRightBaseLightMarginIndicator =
             lightMarginIndicators && String.isEmpty addonBin
@@ -757,13 +837,17 @@ displayBarcode xSizeFactor guardExtensions addonFull lightMarginIndicators font 
             baseInputToBarcodeString False baseStr
                 |> splitBaseStr addRightBaseLightMarginIndicator
 
-        textBaseLeftSingle = showText font textHeight strBaseLeftSingle
+        textBaseLeftSingle =
+            showText font textHeight strBaseLeftSingle
 
-        textBaseLeft = showText font textHeight strBaseLeft
+        textBaseLeft =
+            showText font textHeight strBaseLeft
 
-        textBaseRight = showText font textHeight strBaseRight
+        textBaseRight =
+            showText font textHeight strBaseRight
 
-        textBaseRightSingle = showText font textHeight strBaseRightSingle
+        textBaseRightSingle =
+            showText font textHeight strBaseRightSingle
 
         textAddon =
             (addonStr
@@ -774,7 +858,8 @@ displayBarcode xSizeFactor guardExtensions addonFull lightMarginIndicators font 
             )
                 |> showText font textHeight
 
-        border = 2 * xSizeFactor
+        border =
+            2 * xSizeFactor
 
         collageW =
             if addonW > 0 then
@@ -782,7 +867,8 @@ displayBarcode xSizeFactor guardExtensions addonFull lightMarginIndicators font 
             else
                 baseX2 + border + 13 * xSizeFactor |> ceiling
 
-        collageH = baseY2 + border |> ceiling
+        collageH =
+            baseY2 + border |> ceiling
 
         baseTextLeftOffsetX =
             if String.length strBaseLeft == 5 then
@@ -832,7 +918,8 @@ displayBarcode xSizeFactor guardExtensions addonFull lightMarginIndicators font 
 splitBaseStr : Bool -> String -> ( String, String, String, String )
 splitBaseStr addRightLightMarginIndicator str =
     let
-        slc start end = String.slice start end str
+        slc start end =
+            String.slice start end str
 
         right13 =
             if addRightLightMarginIndicator then
@@ -853,8 +940,6 @@ splitBaseStr addRightLightMarginIndicator str =
 
 ( digitImageWidth, digitImageHeight ) =
     ( 140, 164 )
-
-
 showText : String -> Float -> String -> Form
 showText font textHeight str =
     let
@@ -862,9 +947,11 @@ showText font textHeight str =
             stringToListOfCharStrings str
                 |> List.map (digitImage font scaleF)
 
-        scaleF = textHeight / toFloat digitImageHeight
+        scaleF =
+            textHeight / toFloat digitImageHeight
 
-        distX = toFloat digitImageWidth * scaleF
+        distX =
+            toFloat digitImageWidth * scaleF
     in
         lineUp distX frms |> moveX (toFloat digitImageWidth * scaleF / 2)
 
@@ -888,9 +975,14 @@ stringToListOfCharStrings =
 digitImage : String -> Float -> String -> Form
 digitImage font scaleFactor digit =
     let
-        w = digitImageWidth |> toFloat |> \x -> x * scaleFactor |> round
+        scaleFunc =
+            toFloat >> (\x -> x * scaleFactor) >> round
 
-        h = digitImageHeight |> toFloat |> \x -> x * scaleFactor |> round
+        w =
+            digitImageWidth |> scaleFunc
+
+        h =
+            digitImageHeight |> scaleFunc
     in
         image w h (digitUrl font digit) |> toForm
 
@@ -918,9 +1010,11 @@ digitUrl font digit =
 displayBinary : Int -> Int -> Binary -> Form
 displayBinary xSizeFactor h bin =
     let
-        frms = List.map (showBinChar xSizeFactor h) <| String.toList bin
+        frms =
+            List.map (showBinChar xSizeFactor h) <| String.toList bin
 
-        w = String.length bin
+        w =
+            String.length bin
     in
         lineUp (toFloat xSizeFactor) frms
 

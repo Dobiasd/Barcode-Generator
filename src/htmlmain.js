@@ -1,6 +1,6 @@
 function init() {
   var mainDiv = document.getElementById('main');
-  elmContent = Elm.embed(Elm.BarcodeGenerator, mainDiv, {});
+  elmContent = Elm.BarcodeGenerator.embed(mainDiv);
   elmContent.ports.saveImagePort.subscribe(saveImage);
 }
 
